@@ -1,32 +1,39 @@
-# analytics-logger
+# shared-api-platform
 
-A small, reusable **analytics / event ingestion** service for a handful of static sites and web apps. The goal is to collect **pageviews, clickthroughs, dwell time, and coarse location** (see privacy notes below) without putting database credentials in the browser.
+A **shared AWS API layer** and **IaC home** for anything you run across **several** apps, sites, or small products. The idea is one place to define **HTTP APIs**, **Lambdas**, **auth/CORS/rate limits**, and **data access patterns** so each front end stays thin and never holds cloud DB credentials.
+
+**Analytics / event ingestion** (pageviews, clicks, time-on-page, coarse location from IP, etc.) is a **concrete use case** that fits here, not the name of the whole platform.
 
 ## Problem
 
-You own multiple pages and apps. You want a **single** place to:
+You maintain multiple UIs and small backends. You want:
 
-- Accept events from an **embedded client script** on each site
-- **Validate and sanitize** payloads on the server
-- **Persist** events to a database in AWS
-- Keep secrets and write access **off the client** (no direct browser → RDS with DB user/password)
+- A **single** AWS-shaped stack for **cross-app** concerns (ingest, webhooks, shared reads, feature flags, whatever you add later)
+- **Secrets and writes** to durable stores only in the **platform**, not in static sites or client bundles
+- **Consistent** patterns: API Gateway, Lambda, private databases, WAF, logging, and naming so you are not re-solving the same problems per repo
 
-## Intended architecture (high level)
+## What belongs in this repository
 
-1. **Client** — a small script (or built bundle) included on each page, configured with a per-site id and the ingest API URL. It sends structured events (e.g. `pageview`, `click`, session id, path, optional metadata).
-2. **API** — a public **HTTPS** endpoint (typically **API Gateway** in front of **Lambda**).
-3. **Server** — Lambda (or similar) that **validates, normalizes, and sanitizes** input, then writes to the database. Optional: rate limiting, CORS allowed origins, lightweight site key, IP-based coarse geo.
-4. **Data store** — **DynamoDB** or **RDS** (Lambda in VPC if using RDS), depending on query needs and cost.
+- **Infrastructure as code** for shared API Gateway routes, stages, and integrations
+- **Lambda** handlers and shared **libraries** (validation, logging, idempotency helpers, etc.) used by more than one “surface”
+- **Optional** small client assets (e.g. a embeddable **tracker** script) that are **config-only** on the public side — no long-lived secrets
 
-“Location” should be **coarse** (e.g. country/region from request IP in the API path), not a trust-the-client string. Browser geolocation is optional and **requires user consent** if you use it at all.
+## Example surface: analytics ingest
+
+A browser **embeds a versioned script**; events go to an **HTTPS** endpoint, are **validated and sanitized** server-side, then **persisted** (e.g. DynamoDB or RDS behind Lambda in a VPC). Coarse “location” should come from **server-side** IP handling, not a trusted client string.
+
+## What does *not* need to be here
+
+- Full app-specific UI or a single product’s only backend, unless you deliberately centralize that here.
+- A commitment to one database engine forever — the platform can host multiple data stores and multiple logical APIs.
 
 ## Repository layout (to be filled in)
 
-This repository is a **dedicated** home for the ingest API, infrastructure-as-code, and the shared client asset. **Individual apps** (portfolio site, other GH Pages apps, etc.) only **embed the script** and point at this service — they do not duplicate the backend.
+TBD: structure by **capability** (e.g. `ingest/`, `shared/`, `iac/`) once tooling is chosen. Keep **per-app** repos limited to their UI and a pointer to this platform’s base URLs and client settings.
 
 ## Status
 
-**Scaffold only** — `AGENTS.md` describes the product goal for implementers and agents. Implementation (code, IaC, CI) is intentionally not started here yet.
+**Scaffold** — `AGENTS.md` records goals and boundaries for implementers. Implementation is intentionally not started in this pass.
 
 ## License
 
