@@ -76,12 +76,6 @@ variable "api_throttle_burst_limit" {
   description = "HTTP API $default stage burst (short spikes)."
 }
 
-variable "waf_enable" {
-  type    = bool
-  default = true
-  description = "Attach a regional WAF with a rate limit rule. Set false if you manage WAF outside Terraform."
-}
-
 variable "tags" {
   type    = map(string)
   default = {}
