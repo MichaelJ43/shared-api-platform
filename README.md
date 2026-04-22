@@ -13,7 +13,7 @@ A **shared AWS API layer** and **IaC** home for cross-app **HTTPS** services: on
 | `lambda/` | TypeScript **Node 20** Lambda: validation, CORS, ingest, DynamoDB writes |
 | `client/` | Optional **embeddable browser** build (`npm run build` in `client/`; see [docs/embed.md](docs/embed.md)) |
 | `contract/` | **Dredd** + hooks against the OpenAPI (set `DREDD_BASE_URL` to run) |
-| `deploy/terraform/aws/` | **Terraform**: HTTP API, Lambda, DDB, optional `api.<domain>` + R53, throttling, WAF, CloudWatch |
+| `deploy/terraform/aws/` | **Terraform**: HTTP API, Lambda, DDB, optional `api.<domain>` + R53, throttling, CloudWatch |
 | `openapi/openapi.yaml` | **Public contract** (run `cd lambda && npm run openapi:generate` after schema changes) |
 | `docs/` | [Architecture](docs/architecture.md), [Deployment / GitHub & AWS](docs/deployment.md), [Embed](docs/embed.md) |
 
