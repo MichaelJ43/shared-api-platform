@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: lambda/package-lock.json
+
+      - name: Install (lambda)
+        working-directory: lambda
+        run: npm ci
+
+      - name: Regenerate OpenAPI and fail on drift
+        run: |
+          set -e
+          cd lambda
+          npm run openapi:generate
+          cd ..
+          if ! git diff --exit-code -- openapi/openapi.yaml; then
+            echo "openapi/openapi.yaml is out of date. Run: cd lambda && npm run openapi:generate"
+            exit 1
+          fi
+
+      - name: Test with coverage
+        working-directory: lambda
+        run: npm run test:cov
+
+      - name: Spectral (OpenAPI)
+        working-directory: lambda
+        run: npx spectral lint --ruleset ../.spectral.yaml ../openapi/openapi.yaml

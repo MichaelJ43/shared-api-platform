@@ -1,0 +1,35 @@
+{
+  "name": "shared-api-platform-lambda",
+  "private": true,
+  "version": "0.0.0",
+  "type": "commonjs",
+  "main": "dist/handler.js",
+  "scripts": {
+    "build": "npm run openapi:generate && node scripts/bundle.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:lambda": "node scripts/bundle.mjs",
+    "openapi:generate": "tsx src/openapi-generate.ts",
+    "test": "vitest run",
+    "test:cov": "vitest run --coverage",
+    "lint:oas": "spectral lint --ruleset ../.spectral.yaml ../openapi/openapi.yaml"
+  },
+  "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^7.1.0",
+    "@aws-sdk/client-dynamodb": "^3.675.0",
+    "@aws-sdk/lib-dynamodb": "^3.675.0",
+    "ulid": "^2.3.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^22.9.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "archiver": "^7.0.1",
+    "esbuild": "^0.24.0",
+    "@stoplight/spectral-cli": "^6.11.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "yaml": "^2.6.0"
+  }
+}
