@@ -1,0 +1,15 @@
+{
+  "name": "contract",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dredd": "node run-dredd.cjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "dredd": "^14.1.0"
+  }
+}

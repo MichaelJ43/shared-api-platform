@@ -25,6 +25,12 @@ function buildItem(
   const pk = `APP#${appId}#DAY#${serverTimestampDayUtc}`
   const sk = `${serverTimestamp}#${ingestId}`
 
+  const offsetSec = parseInt(process.env.EVENTS_TTL_OFFSET_SECONDS ?? '0', 10)
+  const ttlValue =
+    Number.isFinite(offsetSec) && offsetSec > 0
+      ? Math.floor(serverTimestamp / 1000) + offsetSec
+      : undefined
+
   const out: Record<string, unknown> = {
     pk,
     sk,
@@ -44,6 +50,9 @@ function buildItem(
   }
   if (userAgent) {
     out.userAgent = userAgent
+  }
+  if (ttlValue !== undefined) {
+    out.ttl = ttlValue
   }
   return out as { pk: string; sk: string; [key: string]: unknown }
 }
