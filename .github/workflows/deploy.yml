@@ -27,9 +27,6 @@ jobs:
       TF_STATE_LOCK_TABLE: ${{ secrets.TF_STATE_LOCK_TABLE }}
       TF_STATE_KEY: shared-api-platform/terraform.tfstate
       TF_IN_AUTOMATION: "true"
-    defaults:
-      run:
-        working-directory: deploy/terraform/aws
 
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +34,7 @@ jobs:
       - name: App version
         id: v
         run: |
-          ver=$(node -p "require('./lambda/package.json').version")
+          ver=$(node -p "require('${{ github.workspace }}/lambda/package.json').version")
           echo "app_version=$ver" >> "$GITHUB_OUTPUT"
           echo "version=$ver"
 
@@ -67,6 +64,7 @@ jobs:
           test -f dist/http.zip
 
       - name: Terraform init
+        working-directory: deploy/terraform/aws
         run: |
           terraform init \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
@@ -76,6 +74,7 @@ jobs:
             -backend-config="encrypt=true"
 
       - name: Terraform apply
+        working-directory: deploy/terraform/aws
         env:
           IP_HASH: ${{ secrets.IP_HASH_SECRET }}
         run: |
@@ -103,6 +102,7 @@ jobs:
 
       - name: Terraform outputs
         id: tfo
+        working-directory: deploy/terraform/aws
         run: |
           echo "api_url=$(terraform output -raw http_api_url 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
           echo "table=$(terraform output -raw events_table 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
