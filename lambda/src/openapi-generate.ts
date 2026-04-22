@@ -63,7 +63,7 @@ registry.registerPath({
 })
 
 const generator = new OpenApiGeneratorV3(registry.definitions)
-const doc = generator.generateDocument({
+const doc: Record<string, unknown> = generator.generateDocument({
   openapi: '3.0.3',
   info: {
     title: 'Shared API Platform',
@@ -77,6 +77,18 @@ const doc = generator.generateDocument({
   ],
   servers: [{ url: 'https://api.michaelj43.dev', description: 'Production (example)' }],
 })
+
+// Dredd / Fury: expand URI templates (e.g. in response examples) need a *parameter-level*
+// `example` for `v`; `schema.example` alone is not enough.
+const postParams = (doc as { paths?: Record<string, { post?: { parameters?: unknown[] } }> })
+  .paths?.['/analytics/events']?.post?.parameters
+if (Array.isArray(postParams)) {
+  for (const p of postParams) {
+    if (p && typeof p === 'object' && p !== null && 'name' in p && p.name === 'v' && 'in' in p && p.in === 'query') {
+      ;(p as { example?: string }).example = '1'
+    }
+  }
+}
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 const outDir = resolve(__dir, '..', '..', 'openapi')

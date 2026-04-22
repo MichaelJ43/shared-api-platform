@@ -17,11 +17,12 @@ resource "aws_lambda_function" "http" {
 
   environment {
     variables = {
-      EVENTS_TABLE_NAME        = aws_dynamodb_table.analytics_events.name
-      CORS_ALLOWED_BASE_HOST  = var.cors_allowed_base_host
-      CORS_ALLOW_LOCALHOST    = var.cors_allow_localhost
-      IP_HASH_SECRET          = var.ip_hash_secret
-      APP_VERSION             = var.app_version
+      EVENTS_TABLE_NAME            = aws_dynamodb_table.analytics_events.name
+      EVENTS_TTL_OFFSET_SECONDS   = tostring(var.analytics_item_ttl_offset_seconds)
+      CORS_ALLOWED_BASE_HOST      = var.cors_allowed_base_host
+      CORS_ALLOW_LOCALHOST        = var.cors_allow_localhost
+      IP_HASH_SECRET              = var.ip_hash_secret
+      APP_VERSION                 = var.app_version
     }
   }
 

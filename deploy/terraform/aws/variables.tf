@@ -57,6 +57,31 @@ variable "http_lambda_zip" {
   default = "../../../lambda/dist/http.zip"
 }
 
+# Seconds after each item’s ingest (server time) to set Dynamo `ttl` (absolute Unix seconds). 0 = omit attribute.
+variable "analytics_item_ttl_offset_seconds" {
+  type        = number
+  description = "0 disables TTL. Default ~90d."
+  default     = 7776000
+}
+
+variable "api_throttle_rate_limit" {
+  type    = number
+  default = 200
+  description = "HTTP API $default stage steady-state requests/sec (per account limits apply)."
+}
+
+variable "api_throttle_burst_limit" {
+  type    = number
+  default = 100
+  description = "HTTP API $default stage burst (short spikes)."
+}
+
+variable "waf_enable" {
+  type    = bool
+  default = true
+  description = "Attach a regional WAF with a rate limit rule. Set false if you manage WAF outside Terraform."
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

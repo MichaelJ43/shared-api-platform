@@ -19,7 +19,9 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: lambda/package-lock.json
+          cache-dependency-path: |
+            lambda/package-lock.json
+            client/package-lock.json
 
       - name: Install (lambda)
         working-directory: lambda
@@ -43,3 +45,33 @@ jobs:
       - name: Spectral (OpenAPI)
         working-directory: lambda
         run: npx spectral lint --ruleset ../.spectral.yaml ../openapi/openapi.yaml
+
+      - name: Install and build (browser client)
+        run: |
+          set -e
+          cd client
+          npm ci
+          npm run build
+
+  dredd:
+    if: vars.DREDD_BASE_URL != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: contract/package-lock.json
+
+      - name: Install (contract)
+        working-directory: contract
+        run: npm ci
+
+      - name: Dredd
+        working-directory: contract
+        run: node run-dredd.cjs
+        env:
+          DREDD_BASE_URL: ${{ vars.DREDD_BASE_URL }}
+          DREDD_ORIGIN: ${{ vars.DREDD_ORIGIN || 'https://michaelj43.dev' }}

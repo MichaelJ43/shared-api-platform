@@ -24,6 +24,11 @@ resource "aws_apigatewayv2_stage" "http" {
   name        = "$default"
   auto_deploy = true
   tags        = local.common_tags
+
+  default_route_settings {
+    throttling_burst_limit   = var.api_throttle_burst_limit
+    throttling_rate_limit     = var.api_throttle_rate_limit
+  }
 }
 
 resource "aws_lambda_permission" "http_invoke" {
