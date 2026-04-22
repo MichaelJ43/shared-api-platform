@@ -1,6 +1,6 @@
 output "http_api_url" {
-  description = "Base URL for clients (https://api.<custom_domain> when custom domain is set)."
-  value       = local.use_custom_domain ? "https://api.${local.custom_domain_host}" : aws_apigatewayv2_api.http.api_endpoint
+  description = "Base URL for clients (https://... when custom domain is set; see main.tf local.api_domain_name)."
+  value       = local.use_custom_domain ? "https://${local.api_domain_name}" : aws_apigatewayv2_api.http.api_endpoint
 }
 
 output "http_api_execute_url" {

@@ -15,7 +15,7 @@ variable "aws_region" {
 }
 
 variable "custom_domain" {
-  description = "Apex (e.g. michaelj43.dev) for api.<apex> if certificate + R53 are set."
+  description = "Apex (e.g. michaelj43.dev) or full API host (e.g. api.michaelj43.dev). Terraform sets the HTTP API custom domain to api.<apex> or reuses the host as-is; duplicate api. is not added."
   type        = string
   default     = null
 }
