@@ -1,0 +1,135 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: write
+  deployments: write
+
+jobs:
+  deploy:
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip deploy]') }}
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://api.michaelj43.dev
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+      TF_STATE_LOCK_TABLE: ${{ secrets.TF_STATE_LOCK_TABLE }}
+      TF_STATE_KEY: shared-api-platform/terraform.tfstate
+      TF_IN_AUTOMATION: "true"
+    defaults:
+      run:
+        working-directory: deploy/terraform/aws
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: App version
+        id: v
+        run: |
+          ver=$(node -p "require('./lambda/package.json').version")
+          echo "app_version=$ver" >> "$GITHUB_OUTPUT"
+          echo "version=$ver"
+
+      - name: Configure AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: lambda/package-lock.json
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Build Lambda
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE/lambda"
+          npm ci
+          npm run openapi:generate
+          node scripts/bundle.mjs
+          test -f dist/http.zip
+
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_STATE_LOCK_TABLE}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform apply
+        env:
+          IP_HASH: ${{ secrets.IP_HASH_SECRET }}
+        run: |
+          set -a
+          export TF_VAR_aws_region="${{ secrets.AWS_REGION }}"
+          export TF_VAR_environment=prod
+          export TF_VAR_app_version="${{ steps.v.outputs.app_version }}"
+          if [ -n "${{ vars.CORS_ALLOWED_BASE_HOST }}" ]; then
+            export TF_VAR_cors_allowed_base_host="${{ vars.CORS_ALLOWED_BASE_HOST }}"
+          fi
+          if [ -n "$IP_HASH" ]; then
+            export TF_VAR_ip_hash_secret="$IP_HASH"
+          fi
+          if [ -n "${{ vars.TF_CUSTOM_DOMAIN }}" ]; then
+            export TF_VAR_custom_domain="${{ vars.TF_CUSTOM_DOMAIN }}"
+          fi
+          if [ -n "${{ secrets.TF_ACM_CERTIFICATE_ARN }}" ]; then
+            export TF_VAR_acm_certificate_arn="${{ secrets.TF_ACM_CERTIFICATE_ARN }}"
+          fi
+          if [ -n "${{ secrets.TF_ROUTE53_HOSTED_ZONE_ID }}" ]; then
+            export TF_VAR_route53_hosted_zone_id="${{ secrets.TF_ROUTE53_HOSTED_ZONE_ID }}"
+          fi
+          set +a
+          terraform apply -auto-approve
+
+      - name: Terraform outputs
+        id: tfo
+        run: |
+          echo "api_url=$(terraform output -raw http_api_url 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+          echo "table=$(terraform output -raw events_table 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## Deploy" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **HTTP base:** ${{ steps.tfo.outputs.api_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Events table:** ${{ steps.tfo.outputs.table }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Bump lambda package version (next release)
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cd "$GITHUB_WORKSPACE/lambda"
+          npm version patch --no-git-tag-version
+          cd "$GITHUB_WORKSPACE"
+          git add lambda/package.json
+          git status
+          git diff --staged
+          if git diff --staged --quiet; then
+            echo "No version change"
+            exit 0
+          fi
+          git commit -m "chore: bump lambda version after deploy [skip deploy]"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

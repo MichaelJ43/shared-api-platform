@@ -5,6 +5,8 @@
 *.log
 node_modules/
 dist/
+coverage/
+lambda/coverage/
 .terraform/
 *.tfstate
 *.tfstate.*

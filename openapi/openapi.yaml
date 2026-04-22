@@ -1,0 +1,188 @@
+openapi: 3.0.3
+info:
+  title: Shared API Platform
+  version: 1.0.0
+  description: Analytics ingest and health. Require ?v=1 on POST /analytics/events.
+  contact:
+    name: Platform
+    url: https://michaelj43.dev
+tags:
+  - name: Health
+    description: Liveness
+  - name: Analytics
+    description: Event ingest
+servers:
+  - url: https://api.michaelj43.dev
+    description: Production (example)
+components:
+  schemas:
+    Health:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        version:
+          type: string
+      required:
+        - ok
+        - version
+      additionalProperties: false
+    IngestAccepted:
+      type: object
+      properties:
+        accepted:
+          type: number
+        ingestId:
+          type: string
+      required:
+        - accepted
+      additionalProperties: false
+    ErrorBody:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+  parameters: {}
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness and deployment version
+      description: Returns ok and the deployed lambda package version string.
+      tags:
+        - Health
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /analytics/events:
+    post:
+      operationId: postAnalyticsEvents
+      summary: Ingest one or more analytics events
+      description: Send a single `event` or a batched `events` array. Query param `v=1` is required.
+      tags:
+        - Analytics
+      parameters:
+        - schema:
+            type: string
+            pattern: ^1$
+            example: "1"
+          required: true
+          name: v
+          in: query
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+                - type: object
+                  properties:
+                    event:
+                      type: object
+                      properties:
+                        appId:
+                          type: string
+                          minLength: 1
+                          maxLength: 128
+                          description: Client-assigned app identifier (opaque string)
+                        sessionId:
+                          type: string
+                          minLength: 1
+                          maxLength: 128
+                        eventType:
+                          type: string
+                          minLength: 1
+                          maxLength: 64
+                          description: e.g. pageview, click
+                        path:
+                          type: string
+                          minLength: 1
+                          maxLength: 2048
+                        clientTimestamp:
+                          anyOf:
+                            - type: string
+                              maxLength: 64
+                            - type: number
+                        context:
+                          type: object
+                          additionalProperties:
+                            nullable: true
+                          description: Optional structured dimensions
+                      required:
+                        - appId
+                        - sessionId
+                        - eventType
+                        - path
+                        - clientTimestamp
+                      additionalProperties: false
+                  required:
+                    - event
+                  additionalProperties: false
+                - type: object
+                  properties:
+                    events:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          appId:
+                            type: string
+                            minLength: 1
+                            maxLength: 128
+                            description: Client-assigned app identifier (opaque string)
+                          sessionId:
+                            type: string
+                            minLength: 1
+                            maxLength: 128
+                          eventType:
+                            type: string
+                            minLength: 1
+                            maxLength: 64
+                            description: e.g. pageview, click
+                          path:
+                            type: string
+                            minLength: 1
+                            maxLength: 2048
+                          clientTimestamp:
+                            anyOf:
+                              - type: string
+                                maxLength: 64
+                              - type: number
+                          context:
+                            type: object
+                            additionalProperties:
+                              nullable: true
+                            description: Optional structured dimensions
+                        required:
+                          - appId
+                          - sessionId
+                          - eventType
+                          - path
+                          - clientTimestamp
+                        additionalProperties: false
+                      minItems: 1
+                      maxItems: 25
+                  required:
+                    - events
+                  additionalProperties: false
+              description: Exactly one of event or events
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestAccepted"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
