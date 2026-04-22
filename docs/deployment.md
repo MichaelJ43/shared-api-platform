@@ -10,7 +10,7 @@ Configure **Actions** secrets and variables (see the plan / operators doc). The 
 
 - **OIDC to AWS** — `AWS_ROLE_ARN` plus a role that can run Terraform in your account
 - **Remote state** — `TF_STATE_BUCKET`, `TF_STATE_LOCK_TABLE` (DynamoDB lock table, partition key `LockID`)
-- **Optional custom domain** — `TF_CUSTOM_DOMAIN` (variable), `TF_ACM_CERTIFICATE_ARN`, `TF_ROUTE53_HOSTED_ZONE_ID` (secrets, if Terraform should manage R53 and TLS)
+- **Optional custom domain** — `TF_CUSTOM_DOMAIN` (variable): set to the **apex** (e.g. `michaelj43.dev`) or the full public API host (e.g. `api.michaelj43.dev`). Both map to a single `api.…` hostname; the apex form must not be prefixed twice. Also `TF_ACM_CERTIFICATE_ARN`, `TF_ROUTE53_HOSTED_ZONE_ID` (secrets, if Terraform should manage R53 and TLS)
 - **CORS and hashing** — `CORS_ALLOWED_BASE_HOST` (variable, e.g. `michaelj43.dev`) and `IP_HASH_SECRET` (secret) passed through as `TF_VAR_*` to the Lambda
 
 Set the `production` **environment** in the repo to match your process (e.g. protection rules). The workflow uses `environment: production` with a fixed **deployment URL** of `https://api.michaelj43.dev` (adjust the workflow or environment if your API URL differs).
