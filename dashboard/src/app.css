@@ -1,5 +1,9 @@
 /* Product-only layout; m43 base styles load from static.michaelj43.dev in index.html. */
 
+.dashboard__signed-out p:last-child {
+  margin-top: 0.75rem;
+}
+
 .dashboard__query {
   display: flex;
   flex-wrap: wrap;
