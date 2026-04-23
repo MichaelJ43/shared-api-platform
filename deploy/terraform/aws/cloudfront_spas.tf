@@ -6,6 +6,16 @@ data "aws_cloudfront_cache_policy" "caching_optimized" {
   name = "Managed-CachingOptimized"
 }
 
+# Do not cache HTML at the edge with CachingOptimized: stale index.html keeps pointing at old
+# hashed JS/CSS after deploy. Vite emits /assets/* with content hashes; those can stay cached.
+data "aws_cloudfront_cache_policy" "caching_disabled" {
+  name = "Managed-CachingDisabled"
+}
+
+data "aws_cloudfront_origin_request_policy" "cors_s3" {
+  name = "Managed-CORS-S3Origin"
+}
+
 # --- Auth SPA ---
 
 resource "aws_cloudfront_origin_access_control" "auth_spa" {
@@ -37,12 +47,24 @@ resource "aws_cloudfront_distribution" "auth_spa" {
   }
 
   default_cache_behavior {
-    target_origin_id       = "s3-auth-spa"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
-    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+    target_origin_id         = "s3-auth-spa"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
+    cached_methods           = ["GET", "HEAD"]
+    compress                 = true
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.cors_s3.id
+  }
+
+  ordered_cache_behavior {
+    path_pattern             = "assets/*"
+    target_origin_id         = "s3-auth-spa"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
+    cached_methods           = ["GET", "HEAD"]
+    compress                 = true
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_optimized.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.cors_s3.id
   }
 
   # SPA: serve index for deep links / object-miss
@@ -132,12 +154,24 @@ resource "aws_cloudfront_distribution" "dashboard_spa" {
   }
 
   default_cache_behavior {
-    target_origin_id       = "s3-dashboard-spa"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
-    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+    target_origin_id         = "s3-dashboard-spa"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
+    cached_methods           = ["GET", "HEAD"]
+    compress                 = true
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.cors_s3.id
+  }
+
+  ordered_cache_behavior {
+    path_pattern             = "assets/*"
+    target_origin_id         = "s3-dashboard-spa"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
+    cached_methods           = ["GET", "HEAD"]
+    compress                 = true
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_optimized.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.cors_s3.id
   }
 
   custom_error_response {
