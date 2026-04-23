@@ -1,0 +1,47 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { QueryCommand } from '@aws-sdk/lib-dynamodb'
+
+const send = vi.fn()
+vi.mock('./dynamoClient', () => ({
+  documentClient: { send: (c: unknown) => send(c) },
+}))
+
+import { queryEventsByAppAndDay } from './v1Admin'
+
+describe('queryEventsByAppAndDay', () => {
+  beforeEach(() => {
+    process.env.EVENTS_TABLE_NAME = 'events-t'
+    send.mockReset()
+  })
+
+  it('throws when table missing', async () => {
+    delete process.env.EVENTS_TABLE_NAME
+    await expect(queryEventsByAppAndDay('a', '2026-01-01', 10, null)).rejects.toThrow('server_misconfiguration')
+  })
+
+  it('queries without cursor', async () => {
+    send.mockResolvedValueOnce({ Items: [{ x: 1 }], LastEvaluatedKey: { pk: 'k' } })
+    const r = await queryEventsByAppAndDay('app1', '2026-04-22', 50, null)
+    expect(r.items).toEqual([{ x: 1 }])
+    expect(r.nextCursor).toBeTruthy()
+    const cmd = send.mock.calls[0][0] as QueryCommand
+    expect(cmd.input.ExclusiveStartKey).toBeUndefined()
+    expect(cmd.input.KeyConditionExpression).toBe('pk = :pk')
+  })
+
+  it('ignores bad cursor and queries without start key', async () => {
+    send.mockResolvedValueOnce({ Items: [] })
+    await queryEventsByAppAndDay('a', '2026-01-01', 10, 'not-valid-base64!!!')
+    const cmd = send.mock.calls[0][0] as QueryCommand
+    expect(cmd.input.ExclusiveStartKey).toBeUndefined()
+  })
+
+  it('uses base64url cursor for ExclusiveStartKey', async () => {
+    const lek = { pk: 'APP#x#DAY#d', sk: 's' }
+    const cursor = Buffer.from(JSON.stringify(lek), 'utf8').toString('base64url')
+    send.mockResolvedValueOnce({ Items: [] })
+    await queryEventsByAppAndDay('a', '2026-01-01', 5, cursor)
+    const cmd = send.mock.calls[0][0] as QueryCommand
+    expect(cmd.input.ExclusiveStartKey).toEqual(lek)
+  })
+})

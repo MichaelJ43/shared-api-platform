@@ -28,6 +28,29 @@ data "aws_iam_policy_document" "lambda_inline" {
     ]
     resources = [aws_dynamodb_table.analytics_events.arn]
   }
+
+  statement {
+    sid = "DynamoAnalyticsRead"
+    actions = [
+      "dynamodb:Query",
+      "dynamodb:GetItem",
+    ]
+    resources = [aws_dynamodb_table.analytics_events.arn]
+  }
+
+  statement {
+    sid = "DynamoAuth"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+    ]
+    resources = [
+      aws_dynamodb_table.auth_users.arn,
+      aws_dynamodb_table.auth_sessions.arn,
+    ]
+  }
 }
 
 resource "aws_iam_role_policy" "lambda_inline" {

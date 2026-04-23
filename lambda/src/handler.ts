@@ -1,8 +1,10 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda'
-import { withCors } from './cors'
+import { getCorsHeadersWithCredentials, withCors } from './cors'
 import { getClientIp, hashClientIp } from './hashIp'
 import { newIngestId, dayUtcString, putEvent, putEventBatch } from './persist'
 import { ingestRequestBodySchema, versionQuerySchema } from './schemas'
+import { handleV1Auth } from './v1Auth'
+import { handleV1Admin } from './v1AdminHttp'
 
 const JSON_HEADERS = { 'content-type': 'application/json' }
 
@@ -34,6 +36,14 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
   const base = process.env.CORS_ALLOWED_BASE_HOST?.trim() ?? ''
   const localhostAllow = process.env.CORS_ALLOW_LOCALHOST?.trim()
 
+  if (method === 'OPTIONS' && path.startsWith('/v1/')) {
+    const c = getCorsHeadersWithCredentials(localhostAllow, requestOrigin, base)
+    if (!c.allow) {
+      return { statusCode: 403, body: '' }
+    }
+    return { statusCode: 204, headers: c.headers, body: '' }
+  }
+
   const c = withCors(localhostAllow, requestOrigin, base)
   const corsH = c.headers
 
@@ -42,6 +52,22 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       return { statusCode: 403, body: '' }
     }
     return { statusCode: 204, headers: corsH, body: '' }
+  }
+
+  if (path.startsWith('/v1/')) {
+    const v1a = await handleV1Auth(event, method, path, base, localhostAllow)
+    if (v1a) {
+      return v1a
+    }
+    const v1b = await handleV1Admin(event, method, path, base, localhostAllow)
+    if (v1b) {
+      return v1b
+    }
+    const c2 = getCorsHeadersWithCredentials(localhostAllow, requestOrigin, base)
+    if (!c2.allow) {
+      return { statusCode: 403, body: 'Forbidden', headers: {} }
+    }
+    return json(404, { error: 'not_found' }, c2.headers)
   }
 
   if (method === 'GET' && path === '/health') {
