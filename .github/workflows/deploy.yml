@@ -48,7 +48,10 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: lambda/package-lock.json
+          cache-dependency-path: |
+            lambda/package-lock.json
+            dashboard/package-lock.json
+            auth-spa/package-lock.json
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -136,6 +139,39 @@ jobs:
         run: |
           echo "api_url=$(terraform output -raw http_api_url 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
           echo "table=$(terraform output -raw events_table 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and sync static SPAs (S3) + CloudFront invalidation
+        # Deploy previously only updated Lambda + Terraform; dashboard/auth HTML/JS in S3 stayed stale.
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/deploy/terraform/aws"
+          OUT=$(terraform output -json)
+          DASH_B=$(echo "$OUT" | jq -r '.dashboard_spa_s3_bucket.value // empty')
+          AUTH_B=$(echo "$OUT" | jq -r '.auth_spa_s3_bucket.value // empty')
+          DASH_CF=$(echo "$OUT" | jq -r '.dashboard_spa_cloudfront_id.value // empty')
+          AUTH_CF=$(echo "$OUT" | jq -r '.auth_spa_cloudfront_id.value // empty')
+          if [ -n "$DASH_B" ] && [ "$DASH_B" != "null" ]; then
+            echo "::group::dashboard → s3://$DASH_B"
+            cd "$GITHUB_WORKSPACE/dashboard"
+            npm ci
+            npm run build
+            aws s3 sync dist/ "s3://${DASH_B}/" --delete
+            echo "::endgroup::"
+            if [ -n "$DASH_CF" ] && [ "$DASH_CF" != "null" ]; then
+              aws cloudfront create-invalidation --distribution-id "$DASH_CF" --paths "/index.html" "/*"
+            fi
+          fi
+          if [ -n "$AUTH_B" ] && [ "$AUTH_B" != "null" ]; then
+            echo "::group::auth-spa → s3://$AUTH_B"
+            cd "$GITHUB_WORKSPACE/auth-spa"
+            npm ci
+            npm run build
+            aws s3 sync dist/ "s3://${AUTH_B}/" --delete
+            echo "::endgroup::"
+            if [ -n "$AUTH_CF" ] && [ "$AUTH_CF" != "null" ]; then
+              aws cloudfront create-invalidation --distribution-id "$AUTH_CF" --paths "/index.html" "/*"
+            fi
+          fi
 
       - name: Job summary
         if: always()
