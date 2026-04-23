@@ -8,7 +8,7 @@ resource "aws_apigatewayv2_api" "http" {
 resource "aws_apigatewayv2_integration" "http" {
   api_id                 = aws_apigatewayv2_api.http.id
   integration_type       = "AWS_PROXY"
-  integration_uri         = aws_lambda_function.http.invoke_arn
+  integration_uri        = aws_lambda_function.http.invoke_arn
   payload_format_version = "2.0"
   integration_method     = "POST"
 }
@@ -26,8 +26,8 @@ resource "aws_apigatewayv2_stage" "http" {
   tags        = local.common_tags
 
   default_route_settings {
-    throttling_burst_limit   = var.api_throttle_burst_limit
-    throttling_rate_limit     = var.api_throttle_rate_limit
+    throttling_burst_limit = var.api_throttle_burst_limit
+    throttling_rate_limit  = var.api_throttle_rate_limit
   }
 }
 

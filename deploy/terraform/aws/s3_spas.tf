@@ -1,8 +1,7 @@
-# S3 buckets for static auth + dashboard UIs. Sync built assets with:
+# S3 buckets for static auth + dashboard UIs. Public access is blocked; access is
+# via CloudFront (see cloudfront_spas.tf: OAC + bucket policy). Sync builds:
 #   aws s3 sync auth-spa/dist/ s3://<bucket> --delete
 #   aws s3 sync dashboard/dist/ s3://<bucket> --delete
-# CloudFront + ACM: either attach manually in console or extend this file with
-# `aws_cloudfront_distribution` and OAC (cert must be in us-east-1 for CF).
 
 resource "aws_s3_bucket" "auth_spa" {
   count  = var.auth_spa_domain != "" ? 1 : 0

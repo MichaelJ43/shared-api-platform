@@ -42,7 +42,7 @@ cd ../dashboard && npm ci && npm run build
 aws s3 sync dist/ s3://<dashboard-bucket> --delete
 ```
 
-Configure **DNS and HTTPS** (e.g. CloudFront + ACM in front of the bucket, or an existing pattern) for the two domains. SPAs use `VITE_API_BASE` at build time for the API base URL.
+Terraform can create **CloudFront** (S3 origin access) and **Route 53** `A`/`AAAA` aliases when you set the SPA domains, **us-east-1** ACM ARNs, and hosted zone secrets (see [Deployment](deployment.md)). After each apply, **sync** new web builds to the buckets. SPAs use `VITE_API_BASE` (or defaults) at build time for the API base URL.
 
 ## Session cookie
 

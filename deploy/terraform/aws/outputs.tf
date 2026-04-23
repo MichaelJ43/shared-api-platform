@@ -30,3 +30,33 @@ output "dashboard_spa_s3_bucket" {
   value       = var.dashboard_spa_domain != "" ? aws_s3_bucket.dashboard_spa[0].bucket : null
   description = "S3 bucket for dashboard; sync dashboard/dist/ here."
 }
+
+output "auth_spa_cloudfront_id" {
+  value       = length(aws_cloudfront_distribution.auth_spa) > 0 ? aws_cloudfront_distribution.auth_spa[0].id : null
+  description = "CloudFront distribution ID for auth static site."
+}
+
+output "auth_spa_url" {
+  value       = trimspace(var.auth_spa_domain) != "" ? "https://${trimspace(var.auth_spa_domain)}" : null
+  description = "Public URL for the auth SPA (after DNS + content sync)."
+}
+
+output "auth_spa_cloudfront_domain" {
+  value       = length(aws_cloudfront_distribution.auth_spa) > 0 ? aws_cloudfront_distribution.auth_spa[0].domain_name : null
+  description = "CloudFront domain name (d*.cloudfront.net) for the auth distribution."
+}
+
+output "dashboard_spa_cloudfront_id" {
+  value       = length(aws_cloudfront_distribution.dashboard_spa) > 0 ? aws_cloudfront_distribution.dashboard_spa[0].id : null
+  description = "CloudFront distribution ID for the dashboard static site."
+}
+
+output "dashboard_spa_url" {
+  value       = trimspace(var.dashboard_spa_domain) != "" ? "https://${trimspace(var.dashboard_spa_domain)}" : null
+  description = "Public URL for the analytics dashboard (after DNS + content sync)."
+}
+
+output "dashboard_spa_cloudfront_domain" {
+  value       = length(aws_cloudfront_distribution.dashboard_spa) > 0 ? aws_cloudfront_distribution.dashboard_spa[0].domain_name : null
+  description = "CloudFront domain name for the dashboard distribution."
+}
