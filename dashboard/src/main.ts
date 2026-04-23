@@ -1,3 +1,5 @@
+import './app.css'
+
 const API = (import.meta.env.VITE_API_BASE_URL ?? 'https://api.michaelj43.dev').replace(/\/$/, '')
 const AUTH = (import.meta.env.VITE_AUTH_ORIGIN ?? 'https://auth.michaelj43.dev').replace(/\/$/, '')
 
@@ -17,26 +19,30 @@ async function me(): Promise<{ email: string; id: string } | null> {
   return j.user
 }
 
-function render(m: { email: string; id: string }) {
+/** Authenticated view: sign out lives in the m43 auth header (same API/cookies as this page). */
+function render() {
   app.innerHTML = `
-    <main style="font-family:system-ui,sans-serif;max-width:48rem;margin:1rem auto;padding:1rem">
-      <p style="color:#333">Signed in as <strong>${escapeHtml(m.email)}</strong>
-        <button type="button" id="out" style="margin-left:1rem">Sign out</button>
-      </p>
-      <h1 style="font-size:1.2rem">Analytics events</h1>
-      <p style="font-size:0.9rem;color:#666">Query partition <code>APP#appId#DAY#&lt;UTC date&gt;</code></p>
-      <p>
-        <label>appId <input id="appId" value="dredd-contract" style="min-width:12rem" /></label>
-        <label style="margin-left:0.5rem">Day (UTC) <input id="day" type="text" placeholder="2026-04-22" style="min-width:8rem" /></label>
-        <button type="button" id="load" style="margin-left:0.5rem">Load</button>
-      </p>
-      <div id="tbl"></div>
-    </main>
+    <p class="m43-intro dashboard__tight">
+      Administrator session — use the header to sign out.
+    </p>
+    <section aria-labelledby="query-heading">
+      <h2 class="m43-section-title" id="query-heading">Query</h2>
+      <div class="dashboard__query">
+        <div class="m43-field">
+          <label for="appId">appId</label>
+          <input class="m43-input" type="text" id="appId" value="dredd-contract" autocomplete="off" />
+        </div>
+        <div class="m43-field">
+          <label for="day">Day (UTC)</label>
+          <input class="m43-input" type="text" id="day" placeholder="2026-04-22" inputmode="numeric" autocomplete="off" />
+        </div>
+        <div class="dashboard__load">
+          <button type="button" class="m43-button m43-button--primary" id="load">Load</button>
+        </div>
+      </div>
+      <div id="tbl" role="status" aria-live="polite"></div>
+    </section>
   `
-  app.querySelector('#out')?.addEventListener('click', async () => {
-    await fetch(`${API}/v1/auth/logout`, { method: 'POST', credentials: 'include' })
-    redirectToSignIn()
-  })
   app.querySelector('#load')?.addEventListener('click', () => void loadRows())
   const today = new Date()
   const y = today.getUTCFullYear()
@@ -54,7 +60,8 @@ async function loadRows() {
   const day = (app.querySelector('#day') as HTMLInputElement).value.trim()
   const tbl = app.querySelector('#tbl') as HTMLDivElement
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-    tbl.innerHTML = '<p style="color:#b00">Invalid day. Use YYYY-MM-DD (UTC).</p>'
+    tbl.innerHTML =
+      '<p class="m43-message--error" role="alert">Invalid day. Use YYYY-MM-DD (UTC).</p>'
     return
   }
   tbl.textContent = 'Loading…'
@@ -69,20 +76,35 @@ async function loadRows() {
   }
   const j = (await r.json()) as { items: Record<string, unknown>[]; nextCursor: string | null }
   if (!j.items.length) {
-    tbl.innerHTML = '<p style="color:#666">No items for that key.</p>'
+    tbl.innerHTML = '<p class="m43-intro">No items for that key.</p>'
     return
   }
   const rows = j.items
     .map(
       (it) => `
       <tr>
-        <td style="border:1px solid #ccc;padding:0.25rem 0.4rem;font-size:0.85rem">${escapeHtml(String(it.eventType ?? ''))}</td>
-        <td style="border:1px solid #ccc;padding:0.25rem 0.4rem;font-size:0.8rem;word-break:break-all">${escapeHtml(String(it.path ?? ''))}</td>
-        <td style="border:1px solid #ccc;padding:0.25rem 0.4rem;font-size:0.8rem">${escapeHtml(String(it.ingestId ?? ''))}</td>
+        <td>${escapeHtml(String(it.eventType ?? ''))}</td>
+        <td class="dashboard__path-cell">${escapeHtml(String(it.path ?? ''))}</td>
+        <td>${escapeHtml(String(it.ingestId ?? ''))}</td>
       </tr>`,
     )
     .join('')
-  tbl.innerHTML = `<table style="border-collapse:collapse;width:100%"><thead><tr><th align="left">eventType</th><th align="left">path</th><th align="left">ingestId</th></tr></thead><tbody>${rows}</tbody></table>${j.nextCursor ? '<p style=font-size:0.85rem>More data available; pagination can be added.</p>' : ''}`
+  tbl.innerHTML = `<div class="dashboard__table-wrap">
+    <table class="m43-table">
+      <thead>
+        <tr>
+          <th scope="col">eventType</th>
+          <th scope="col">path</th>
+          <th scope="col">ingestId</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>${
+    j.nextCursor
+      ? '<p class="m43-intro dashboard__hint">More data available; pagination can be added.</p>'
+      : ''
+  }`
 }
 
 ;(async () => {
@@ -91,7 +113,7 @@ async function loadRows() {
     redirectToSignIn()
     return
   }
-  render(u)
+  render()
 })().catch(() => {
-  app.textContent = 'Error'
+  app.innerHTML = '<p class="m43-message--error" role="alert">Error loading the dashboard. Try again.</p>'
 })
