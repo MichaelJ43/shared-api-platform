@@ -4,9 +4,61 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Analytics events</title>
+    <link
+      rel="stylesheet"
+      href="https://static.michaelj43.dev/v1/m43-tokens.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://static.michaelj43.dev/v1/m43-shell.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://static.michaelj43.dev/v1/m43-primitives.css"
+    />
   </head>
-  <body>
-    <div id="app"></div>
+  <body class="m43">
+    <div class="m43 m43-page" id="page">
+      <header class="m43-site-header">
+        <div class="m43-site-header__row">
+          <h1>Analytics events</h1>
+          <div
+            class="m43-site-header__auth"
+            data-m43-auth-header
+            aria-label="Account"
+          ></div>
+        </div>
+        <p class="m43-intro">
+          Query <code>APP#appId#DAY#&lt;UTC date&gt;</code> partitions for
+          ingested <strong>pageview</strong> and other events.
+        </p>
+      </header>
+      <main class="m43-main">
+        <div id="app">
+          <p>Loading…</p>
+        </div>
+      </main>
+      <footer class="m43-site-footer">
+        <p>shared-api-platform · admin</p>
+      </footer>
+    </div>
+    <!--
+      `__DASH_M43_*__` tokens are replaced at build / dev (see dashboard/vite.config.ts) from
+      VITE_API_BASE_URL and VITE_AUTH_ORIGIN so these scripts match fetch() in main.ts.
+    -->
+    <script
+      src="https://static.michaelj43.dev/v1/m43-analytics.js"
+      defer
+      data-m43-app="analytics-dashboard"
+      data-m43-api="__DASH_M43_API__"
+    ></script>
+    <script
+      src="https://static.michaelj43.dev/v1/m43-auth-header.js"
+      defer
+      data-m43-auth
+      data-m43-api="__DASH_M43_API__"
+      data-m43-auth-origin="__DASH_M43_AUTH_ORIGIN__"
+    ></script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -1,0 +1,35 @@
+/* Product-only layout; m43 base styles load from static.michaelj43.dev in index.html. */
+
+.dashboard__query {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.dashboard__query .m43-field {
+  margin-bottom: 0;
+  flex: 1 1 12rem;
+  min-width: 10rem;
+}
+
+.dashboard__load {
+  margin-top: 0.1rem;
+}
+
+.m43 .dashboard__path-cell {
+  word-break: break-all;
+}
+
+.dashboard__tight {
+  margin-top: 0;
+}
+
+.dashboard__hint {
+  margin-top: 0.5rem;
+}
+
+.dashboard__table-wrap {
+  overflow-x: auto;
+}
