@@ -32,7 +32,17 @@ form.addEventListener('submit', async (e) => {
       body: JSON.stringify({ email, password, returnUrl }),
       credentials: 'include',
     })
-    const j = (await r.json()) as { redirect?: string; error?: string }
+    const text = await r.text()
+    let j: { redirect?: string; error?: string } = {}
+    try {
+      j = text ? (JSON.parse(text) as { redirect?: string; error?: string }) : {}
+    } catch {
+      err.textContent =
+        r.status === 403
+          ? 'Access blocked (CORS). Ensure the API Lambda has CORS_ALLOWED_BASE_HOST set to your site apex, e.g. michaelj43.dev.'
+          : `Unexpected response (${r.status}). Check the API URL and browser devtools (Network) for the login request.`
+      return
+    }
     if (!r.ok) {
       err.textContent = 'Invalid email or password.'
       return
@@ -42,7 +52,9 @@ form.addEventListener('submit', async (e) => {
     } else {
       err.textContent = 'No redirect from server'
     }
-  } catch {
-    err.textContent = 'Network error'
+  } catch (e) {
+    const msg = e instanceof TypeError && e.message === 'Failed to fetch' ? e.message : String(e)
+    err.textContent =
+      `Request failed: ${msg}. Often this is CORS (Lambda missing CORS_ALLOWED_BASE_HOST) or a wrong API URL (rebuild with VITE_API_BASE_URL if needed).`
   }
 })
