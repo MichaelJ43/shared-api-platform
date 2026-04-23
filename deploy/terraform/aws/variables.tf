@@ -65,14 +65,14 @@ variable "analytics_item_ttl_offset_seconds" {
 }
 
 variable "api_throttle_rate_limit" {
-  type    = number
-  default = 200
+  type        = number
+  default     = 200
   description = "HTTP API $default stage steady-state requests/sec (per account limits apply)."
 }
 
 variable "api_throttle_burst_limit" {
-  type    = number
-  default = 100
+  type        = number
+  default     = 100
   description = "HTTP API $default stage burst (short spikes)."
 }
 
@@ -95,11 +95,11 @@ variable "auth_default_app_url" {
   description = "Default redirect after login if returnUrl omitted (e.g. https://analytics.michaelj43.dev/)."
 }
 
-# Static UIs: S3 + CloudFront; omit domains to skip (Terraform count = 0)
+# Static UIs: S3 + (optional) CloudFront + Route 53 when cert + zone IDs are set; see cloudfront_spas.tf
 variable "auth_spa_domain" {
   type        = string
   default     = ""
-  description = "e.g. auth.michaelj43.dev. Empty = do not create auth static hosting."
+  description = "e.g. auth.michaelj43.dev. Empty = do not create auth S3/CloudFront."
 }
 
 variable "auth_spa_acm_certificate_arn" {
@@ -112,13 +112,27 @@ variable "auth_spa_acm_certificate_arn" {
 variable "dashboard_spa_domain" {
   type        = string
   default     = ""
-  description = "e.g. analytics.michaelj43.dev. Empty = do not create dashboard static hosting."
+  description = "e.g. analytics.michaelj43.dev. Empty = do not create dashboard S3/CloudFront."
 }
 
 variable "dashboard_spa_acm_certificate_arn" {
   type        = string
   default     = ""
   description = "ACM in us-east-1 for dashboard_spa_domain."
+  sensitive   = true
+}
+
+variable "auth_spa_route53_hosted_zone_id" {
+  type        = string
+  default     = ""
+  description = "Route 53 public hosted zone ID for auth_spa_domain (A/AAAA alias to CloudFront). Can match dashboard zone if both subdomains live in the same zone."
+  sensitive   = true
+}
+
+variable "dashboard_spa_route53_hosted_zone_id" {
+  type        = string
+  default     = ""
+  description = "Route 53 public hosted zone ID for dashboard_spa_domain (A/AAAA alias to CloudFront)."
   sensitive   = true
 }
 
