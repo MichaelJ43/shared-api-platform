@@ -66,8 +66,10 @@ resource "aws_route53_record" "http_api" {
   count = local.create_route53 ? 1 : 0
 
   zone_id = local.route53_zone_id
-  name    = "api"
-  type    = "A"
+  # Absolute FQDN — not a label relative to the zone. Using "api" here made
+  # api.api… when the hosted zone was api.michaelj43.dev (relative "api" = api.api…).
+  name = "${local.api_domain_name}."
+  type = "A"
 
   alias {
     name                   = aws_apigatewayv2_domain_name.http[0].domain_name_configuration[0].target_domain_name
