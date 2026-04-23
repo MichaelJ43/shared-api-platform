@@ -5,9 +5,9 @@ const AUTH = (import.meta.env.VITE_AUTH_ORIGIN ?? 'https://auth.michaelj43.dev')
 
 const app = document.getElementById('app')!
 
-function redirectToSignIn() {
+function signInHref(): string {
   const here = new URL(window.location.href)
-  window.location.href = `${AUTH}/?returnUrl=${encodeURIComponent(here.toString())}`
+  return `${AUTH}/?returnUrl=${encodeURIComponent(here.toString())}`
 }
 
 async function me(): Promise<{ email: string; id: string } | null> {
@@ -17,6 +17,28 @@ async function me(): Promise<{ email: string; id: string } | null> {
   }
   const j = (await r.json()) as { user: { email: string; id: string } }
   return j.user
+}
+
+function renderSignedOut() {
+  const href = signInHref()
+  app.innerHTML = `
+    <div class="dashboard__signed-out">
+      <p class="m43-intro dashboard__tight">
+        Sign in with an account that can access admin analytics to run queries.
+      </p>
+      <p>
+        <a class="m43-button m43-button--primary" href="${escapeAttr(href)}">Sign in</a>
+      </p>
+    </div>
+  `
+}
+
+function escapeAttr(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
 }
 
 /** Authenticated view: sign out lives in the m43 auth header (same API/cookies as this page). */
@@ -71,7 +93,9 @@ async function loadRows() {
   u.searchParams.set('limit', '50')
   const r = await fetch(u.toString(), { credentials: 'include' })
   if (r.status === 401) {
-    redirectToSignIn()
+    const href = signInHref()
+    tbl.innerHTML = `<p class="m43-message--error" role="alert">Not signed in or session expired.</p>
+      <p><a class="m43-button m43-button--primary" href="${escapeAttr(href)}">Sign in</a></p>`
     return
   }
   const j = (await r.json()) as { items: Record<string, unknown>[]; nextCursor: string | null }
@@ -110,7 +134,7 @@ async function loadRows() {
 ;(async () => {
   const u = await me()
   if (!u) {
-    redirectToSignIn()
+    renderSignedOut()
     return
   }
   render()
