@@ -97,6 +97,27 @@ jobs:
           if [ -n "${{ secrets.TF_ROUTE53_HOSTED_ZONE_ID }}" ]; then
             export TF_VAR_route53_hosted_zone_id="${{ secrets.TF_ROUTE53_HOSTED_ZONE_ID }}"
           fi
+          if [ -n "${{ vars.AUTH_SPA_DOMAIN }}" ]; then
+            export TF_VAR_auth_spa_domain="${{ vars.AUTH_SPA_DOMAIN }}"
+          fi
+          if [ -n "${{ secrets.TF_AUTH_SPA_ACM_CERTIFICATE_ARN }}" ]; then
+            export TF_VAR_auth_spa_acm_certificate_arn="${{ secrets.TF_AUTH_SPA_ACM_CERTIFICATE_ARN }}"
+          fi
+          if [ -n "${{ vars.DASHBOARD_SPA_DOMAIN }}" ]; then
+            export TF_VAR_dashboard_spa_domain="${{ vars.DASHBOARD_SPA_DOMAIN }}"
+          fi
+          if [ -n "${{ secrets.TF_DASHBOARD_SPA_ACM_CERTIFICATE_ARN }}" ]; then
+            export TF_VAR_dashboard_spa_acm_certificate_arn="${{ secrets.TF_DASHBOARD_SPA_ACM_CERTIFICATE_ARN }}"
+          fi
+          if [ -n "${{ vars.AUTH_DEFAULT_APP_URL }}" ]; then
+            export TF_VAR_auth_default_app_url="${{ vars.AUTH_DEFAULT_APP_URL }}"
+          fi
+          if [ -n "${{ vars.AUTH_SESSION_TTL_SECONDS }}" ]; then
+            export TF_VAR_auth_session_ttl_seconds="${{ vars.AUTH_SESSION_TTL_SECONDS }}"
+          fi
+          if [ -n "${{ vars.AUTH_ALLOW_REGISTER }}" ]; then
+            export TF_VAR_auth_allow_register="${{ vars.AUTH_ALLOW_REGISTER }}"
+          fi
           set +a
           terraform apply -auto-approve
 

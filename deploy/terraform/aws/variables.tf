@@ -76,6 +76,52 @@ variable "api_throttle_burst_limit" {
   description = "HTTP API $default stage burst (short spikes)."
 }
 
+# Auth (Lambda session cookies, optional self-register)
+variable "auth_session_ttl_seconds" {
+  type        = number
+  description = "Server-side session / cookie max-age (e.g. 604800 = 7d)."
+  default     = 604800
+}
+
+variable "auth_allow_register" {
+  type        = bool
+  default     = false
+  description = "If true, enables POST /v1/auth/register in Lambda (guard in prod carefully)."
+}
+
+variable "auth_default_app_url" {
+  type        = string
+  default     = ""
+  description = "Default redirect after login if returnUrl omitted (e.g. https://analytics.michaelj43.dev/)."
+}
+
+# Static UIs: S3 + CloudFront; omit domains to skip (Terraform count = 0)
+variable "auth_spa_domain" {
+  type        = string
+  default     = ""
+  description = "e.g. auth.michaelj43.dev. Empty = do not create auth static hosting."
+}
+
+variable "auth_spa_acm_certificate_arn" {
+  type        = string
+  default     = ""
+  description = "ACM in us-east-1 for auth_spa_domain (CloudFront)."
+  sensitive   = true
+}
+
+variable "dashboard_spa_domain" {
+  type        = string
+  default     = ""
+  description = "e.g. analytics.michaelj43.dev. Empty = do not create dashboard static hosting."
+}
+
+variable "dashboard_spa_acm_certificate_arn" {
+  type        = string
+  default     = ""
+  description = "ACM in us-east-1 for dashboard_spa_domain."
+  sensitive   = true
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

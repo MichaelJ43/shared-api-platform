@@ -22,6 +22,8 @@ jobs:
           cache-dependency-path: |
             lambda/package-lock.json
             client/package-lock.json
+            auth-spa/package-lock.json
+            dashboard/package-lock.json
 
       - name: Install (lambda)
         working-directory: lambda
@@ -50,6 +52,20 @@ jobs:
         run: |
           set -e
           cd client
+          npm ci
+          npm run build
+
+      - name: Build auth-spa
+        run: |
+          set -e
+          cd auth-spa
+          npm ci
+          npm run build
+
+      - name: Build dashboard
+        run: |
+          set -e
+          cd dashboard
           npm ci
           npm run build
 

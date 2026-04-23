@@ -10,12 +10,13 @@ A **shared AWS API layer** and **IaC** home for cross-app **HTTPS** services: on
 
 | Path | Role |
 |------|------|
-| `lambda/` | TypeScript **Node 20** Lambda: validation, CORS, ingest, DynamoDB writes |
+| `lambda/` | TypeScript **Node 20** Lambda: validation, CORS, ingest, DynamoDB writes, **v1 auth + admin** |
 | `client/` | Optional **embeddable browser** build (`npm run build` in `client/`; see [docs/embed.md](docs/embed.md)) |
+| `auth-spa/` / `dashboard/` | Vite **login** and **analytics dashboard** UI builds (`npm ci && npm run build`; see [docs/auth-and-dashboard.md](docs/auth-and-dashboard.md)) |
 | `contract/` | **Dredd** + hooks against the OpenAPI (set `DREDD_BASE_URL` to run) |
-| `deploy/terraform/aws/` | **Terraform**: HTTP API, Lambda, DDB, optional `api.<domain>` + R53, throttling, CloudWatch |
+| `deploy/terraform/aws/` | **Terraform**: HTTP API, Lambda, DDB, optional `api.<domain>` + R53, throttling, CloudWatch, optional S3 for SPAs |
 | `openapi/openapi.yaml` | **Public contract** (run `cd lambda && npm run openapi:generate` after schema changes) |
-| `docs/` | [Architecture](docs/architecture.md), [Deployment / GitHub & AWS](docs/deployment.md), [Embed](docs/embed.md) |
+| `docs/` | [Architecture](docs/architecture.md), [Deployment / GitHub & AWS](docs/deployment.md), [Embed](docs/embed.md), [Auth + dashboard](docs/auth-and-dashboard.md) |
 
 ## Quick local
 

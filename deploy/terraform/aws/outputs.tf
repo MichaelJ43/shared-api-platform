@@ -20,3 +20,13 @@ output "events_table" {
 output "lambda_function" {
   value = aws_lambda_function.http.arn
 }
+
+output "auth_spa_s3_bucket" {
+  value       = var.auth_spa_domain != "" ? aws_s3_bucket.auth_spa[0].bucket : null
+  description = "S3 bucket for auth-spa static build; sync auth-spa/dist/ here."
+}
+
+output "dashboard_spa_s3_bucket" {
+  value       = var.dashboard_spa_domain != "" ? aws_s3_bucket.dashboard_spa[0].bucket : null
+  description = "S3 bucket for dashboard; sync dashboard/dist/ here."
+}
