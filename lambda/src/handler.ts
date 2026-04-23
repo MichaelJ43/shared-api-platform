@@ -29,7 +29,43 @@ function badRequest(
   return json(400, { error: 'bad_request', message }, cors)
 }
 
+/** 204: omit `body` (HTTP API + payload v2 is happier than `body: ''` for no-content). */
+function noContent204(
+  headers: Record<string, string>,
+): APIGatewayProxyResultV2 {
+  return { statusCode: 204, headers }
+}
+
+function internalErrorCors(
+  event: APIGatewayProxyEventV2,
+  message: string,
+): APIGatewayProxyResultV2 {
+  const requestOrigin = event.headers?.origin ?? event.headers?.Origin
+  const base = process.env.CORS_ALLOWED_BASE_HOST?.trim() ?? ''
+  const localhostAllow = process.env.CORS_ALLOW_LOCALHOST?.trim()
+  const c = getCorsHeadersWithCredentials(localhostAllow, requestOrigin, base)
+  return {
+    statusCode: 500,
+    headers: c.allow
+      ? { ...c.headers, 'content-type': 'application/json' }
+      : { 'content-type': 'application/json' },
+    body: JSON.stringify({ error: 'internal_error', message }),
+  }
+}
+
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
+  try {
+    return await handleEvent(event)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('handler unhandled', err)
+    return internalErrorCors(event, process.env.NODE_ENV === 'test' ? msg : 'server_error')
+  }
+}
+
+async function handleEvent(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyResultV2> {
   const requestOrigin = event.headers?.origin ?? event.headers?.Origin
   const method = (event.requestContext?.http?.method ?? 'GET').toUpperCase()
   const path = event.requestContext?.http?.path ?? event.rawPath ?? '/'
@@ -41,7 +77,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     if (!c.allow) {
       return { statusCode: 403, body: '' }
     }
-    return { statusCode: 204, headers: c.headers, body: '' }
+    return noContent204(c.headers)
   }
 
   const c = withCors(localhostAllow, requestOrigin, base)
@@ -51,7 +87,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     if (!c.allow) {
       return { statusCode: 403, body: '' }
     }
-    return { statusCode: 204, headers: corsH, body: '' }
+    return noContent204(corsH)
   }
 
   if (path.startsWith('/v1/')) {
