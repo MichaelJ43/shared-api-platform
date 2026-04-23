@@ -44,6 +44,12 @@ aws s3 sync dist/ s3://<dashboard-bucket> --delete
 
 Terraform can create **CloudFront** (S3 origin access) and **Route 53** `A`/`AAAA` aliases when you set the SPA domains, **us-east-1** ACM ARNs, and hosted zone secrets (see [Deployment](deployment.md)). After each apply, **sync** new web builds to the buckets. SPAs use `VITE_API_BASE` (or defaults) at build time for the API base URL.
 
+**Stale UI right after a deploy** usually means the browser or CloudFront is still using an old **`index.html`**, which references previous hashed files under `assets/`. The Terraform for these distributions disables caching for the default (HTML) behavior and allows long cache only for `assets/*`. If you still see a mismatch before that applies, run an invalidation (outputs: `auth_spa_cloudfront_id`, `dashboard_spa_cloudfront_id`):
+
+```bash
+aws cloudfront create-invalidation --distribution-id "$ID" --paths "/index.html" "/*"
+```
+
 ## Session cookie
 
 - Name: `sap_session`.
