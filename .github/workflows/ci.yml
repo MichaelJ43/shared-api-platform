@@ -44,6 +44,14 @@ jobs:
         working-directory: lambda
         run: npm run test:cov
 
+      - name: Lambda zip includes argon2 (must match Amazon Linux; CI is linux-x64)
+        working-directory: lambda
+        run: |
+          set -e
+          node scripts/bundle.mjs
+          unzip -l dist/http.zip | grep -q 'node_modules/argon2/prebuilds/linux-x64' || { echo "argon2 linux prebuild missing from http.zip"; exit 1; }
+          test "$(unzip -l dist/http.zip | grep -c 'node_modules/argon2/')" -ge 1
+
       - name: Spectral (OpenAPI)
         working-directory: lambda
         run: npx spectral lint --ruleset ../.spectral.yaml ../openapi/openapi.yaml

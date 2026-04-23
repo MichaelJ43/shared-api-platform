@@ -62,6 +62,7 @@ jobs:
           npm run openapi:generate
           node scripts/bundle.mjs
           test -f dist/http.zip
+          unzip -l dist/http.zip | grep -q 'node_modules/argon2/prebuilds/linux-x64' || { echo "argon2 native prebuilds missing from http.zip"; exit 1; }
 
       - name: Terraform init
         working-directory: deploy/terraform/aws
