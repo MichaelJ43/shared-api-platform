@@ -10,12 +10,12 @@ function signInHref(): string {
   return `${AUTH}/?returnUrl=${encodeURIComponent(here.toString())}`
 }
 
-async function me(): Promise<{ email: string; id: string } | null> {
+async function me(): Promise<{ email: string; id: string; role: 'admin' | 'user' } | null> {
   const r = await fetch(`${API}/v1/auth/me`, { credentials: 'include' })
   if (r.status === 401) {
     return null
   }
-  const j = (await r.json()) as { user: { email: string; id: string } }
+  const j = (await r.json()) as { user: { email: string; id: string; role: 'admin' | 'user' } }
   return j.user
 }
 
@@ -24,10 +24,20 @@ function renderSignedOut() {
   app.innerHTML = `
     <div class="dashboard__signed-out">
       <p class="m43-intro dashboard__tight">
-        Sign in with an account that can access admin analytics to run queries.
+        Sign in with an admin account to run analytics queries.
       </p>
       <p>
         <a class="m43-button m43-button--primary" href="${escapeAttr(href)}">Sign in</a>
+      </p>
+    </div>
+  `
+}
+
+function renderNotAdmin() {
+  app.innerHTML = `
+    <div class="dashboard__signed-out">
+      <p class="m43-intro dashboard__tight" role="alert">
+        You are signed in, but this account does not have admin access to analytics data.
       </p>
     </div>
   `
@@ -98,6 +108,11 @@ async function loadRows() {
       <p><a class="m43-button m43-button--primary" href="${escapeAttr(href)}">Sign in</a></p>`
     return
   }
+  if (r.status === 403) {
+    tbl.innerHTML =
+      '<p class="m43-message--error" role="alert">Not allowed — this account is not an admin.</p>'
+    return
+  }
   const j = (await r.json()) as { items: Record<string, unknown>[]; nextCursor: string | null }
   if (!j.items.length) {
     tbl.innerHTML = '<p class="m43-intro">No items for that key.</p>'
@@ -135,6 +150,10 @@ async function loadRows() {
   const u = await me()
   if (!u) {
     renderSignedOut()
+    return
+  }
+  if (u.role !== 'admin') {
+    renderNotAdmin()
     return
   }
   render()

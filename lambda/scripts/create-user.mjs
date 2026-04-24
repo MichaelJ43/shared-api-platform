@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Create a user in AUTH_USERS (Argon2id hash, same policy as API).
- * Usage: AUTH_USERS_TABLE_NAME=... AWS_REGION=... node scripts/create-user.mjs
+ * Usage: AUTH_USERS_TABLE_NAME=... AWS_REGION=... node scripts/create-user.mjs [--admin] <email>
  * Password: read from stdin (line) or env CREATE_USER_PASSWORD (not recommended).
+ * Use --admin to set role=admin for analytics dashboard API access.
  */
 import { createInterface } from 'node:readline'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
@@ -47,7 +48,10 @@ function validate(email, password) {
 }
 
 async function main() {
-  const email = normEmail(process.argv[2] ?? (await readLine('Email: ')))
+  const argv = process.argv.slice(2)
+  const isAdmin = argv.includes('--admin')
+  const posArgs = argv.filter((a) => a !== '--admin')
+  const email = normEmail(posArgs[0] ?? (await readLine('Email: ')))
   if (!email || !email.includes('@')) {
     console.error('Invalid email')
     process.exit(1)
@@ -64,14 +68,15 @@ async function main() {
   const hash = await argon2.hash(password, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 })
   const userId = ulid()
   const createdAt = new Date().toISOString()
+  const item = { email, userId, passwordHash: hash, createdAt, ...(isAdmin ? { role: 'admin' } : {}) }
   await doc.send(
     new PutCommand({
       TableName: table,
-      Item: { email, userId, passwordHash: hash, createdAt },
+      Item: item,
       ConditionExpression: 'attribute_not_exists(email)',
     }),
   )
-  console.log('Created user', email, userId)
+  console.log('Created user', email, userId, isAdmin ? '(admin)' : '')
 }
 
 main().catch((e) => {
