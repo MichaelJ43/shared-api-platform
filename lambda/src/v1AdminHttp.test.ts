@@ -3,6 +3,8 @@ import type { APIGatewayProxyEventV2 } from 'aws-lambda'
 
 const requireSession = vi.hoisted(() => vi.fn())
 const queryEventsByAppAndDay = vi.hoisted(() => vi.fn())
+const queryEventsByAppAndTimeRange = vi.hoisted(() => vi.fn())
+const listDistinctAppIds = vi.hoisted(() => vi.fn())
 const getUserByEmail = vi.hoisted(() => vi.fn())
 const listAuthUsers = vi.hoisted(() => vi.fn())
 const setUserRole = vi.hoisted(() => vi.fn())
@@ -11,7 +13,11 @@ const setRegistrationPreference = vi.hoisted(() => vi.fn())
 const registrationEnvAllows = vi.hoisted(() => vi.fn())
 
 vi.mock('./v1Auth', () => ({ requireSession }))
-vi.mock('./v1Admin', () => ({ queryEventsByAppAndDay }))
+vi.mock('./v1Admin', () => ({
+  queryEventsByAppAndDay,
+  queryEventsByAppAndTimeRange,
+  listDistinctAppIds,
+}))
 vi.mock('./authStore', async (importOriginal) => {
   const mod = await importOriginal<typeof import('./authStore')>()
   return { ...mod, getUserByEmail, listAuthUsers, setUserRole }
@@ -67,6 +73,8 @@ describe('handleV1Admin', () => {
       preference: false,
     })
     registrationEnvAllows.mockReturnValue(true)
+    queryEventsByAppAndTimeRange.mockResolvedValue({ items: [], nextCursor: null })
+    listDistinctAppIds.mockResolvedValue(['app-a'])
   })
 
   it('returns null for non-admin paths', async () => {
@@ -174,6 +182,67 @@ describe('handleV1Admin', () => {
     expect(r?.statusCode).toBe(200)
     const j = JSON.parse(r?.body ?? '{}')
     expect(j.items).toEqual([{ t: 1 }])
+  })
+
+  it('200 with from/to uses time range query', async () => {
+    requireSession.mockResolvedValue({ ok: true, userId: '1', email: 'a@b.com', sessionId: 's' })
+    queryEventsByAppAndTimeRange.mockResolvedValue({ items: [{ serverTimestamp: 1 }], nextCursor: null })
+    const r = await handleV1Admin(
+      ev({
+        queryStringParameters: {
+          appId: 'x',
+          from: '2026-01-15T00:00:00.000Z',
+          to: '2026-01-15T12:00:00.000Z',
+        },
+      }),
+      'GET',
+      '/v1/admin/analytics/events',
+      'michaelj43.dev',
+      undefined,
+    )
+    expect(r?.statusCode).toBe(200)
+    expect(queryEventsByAppAndTimeRange).toHaveBeenCalled()
+    expect(queryEventsByAppAndDay).not.toHaveBeenCalled()
+  })
+
+  it('400 when both day and from/to', async () => {
+    requireSession.mockResolvedValue({ ok: true, userId: '1', email: 'a@b.com', sessionId: 's' })
+    const r = await handleV1Admin(
+      ev({
+        queryStringParameters: {
+          appId: 'a',
+          day: '2026-01-15',
+          from: '2026-01-15T00:00:00.000Z',
+          to: '2026-01-15T12:00:00.000Z',
+        },
+      }),
+      'GET',
+      '/v1/admin/analytics/events',
+      'michaelj43.dev',
+      undefined,
+    )
+    expect(r?.statusCode).toBe(400)
+  })
+
+  it('GET /v1/admin/analytics/app-ids', async () => {
+    requireSession.mockResolvedValue({ ok: true, userId: '1', email: 'a@b.com', sessionId: 's' })
+    listDistinctAppIds.mockResolvedValue(['dredd-contract', 'z'])
+    const r = await handleV1Admin(
+      ev({
+        rawPath: '/v1/admin/analytics/app-ids',
+        requestContext: {
+          ...ev().requestContext,
+          http: { method: 'GET', path: '/v1/admin/analytics/app-ids', protocol: 'HTTP/1.1' },
+        },
+        queryStringParameters: undefined,
+      }),
+      'GET',
+      '/v1/admin/analytics/app-ids',
+      'michaelj43.dev',
+      undefined,
+    )
+    expect(r?.statusCode).toBe(200)
+    expect(JSON.parse(r?.body ?? '{}').appIds).toEqual(['dredd-contract', 'z'])
   })
 
   it('404 for unknown admin path', async () => {

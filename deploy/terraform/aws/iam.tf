@@ -34,6 +34,7 @@ data "aws_iam_policy_document" "lambda_inline" {
     actions = [
       "dynamodb:Query",
       "dynamodb:GetItem",
+      "dynamodb:Scan",
     ]
     resources = [aws_dynamodb_table.analytics_events.arn]
   }
