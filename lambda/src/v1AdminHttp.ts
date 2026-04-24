@@ -8,7 +8,7 @@ import {
 import { buildSessionCookie } from './cookieUtil'
 import { getCorsHeadersWithCredentials } from './cors'
 import { z } from 'zod'
-import { queryEventsByAppAndDay } from './v1Admin'
+import { listDistinctAppIds, queryEventsByAppAndDay, queryEventsByAppAndTimeRange } from './v1Admin'
 import { requireSession } from './v1Auth'
 
 const JSON_HEADERS = { 'content-type': 'application/json' }
@@ -26,12 +26,26 @@ function corsV1(
   return { allow: c.allow, headers: c.allow ? { ...c.headers, ...JSON_HEADERS } : {} }
 }
 
-const qSchema = z.object({
-  appId: z.string().min(1).max(256),
-  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  limit: z.coerce.number().min(1).max(200).default(50),
-  cursor: z.string().optional().nullable(),
-})
+/** Max window for from/to analytics queries (~31 days). */
+const MAX_ANALYTICS_RANGE_MS = 31 * 24 * 60 * 60 * 1000
+
+const analyticsEventsQuerySchema = z
+  .object({
+    appId: z.string().min(1).max(256),
+    limit: z.coerce.number().min(1).max(500).default(200),
+    cursor: z.string().optional().nullable(),
+    day: z.string().optional(),
+    from: z.string().optional(),
+    to: z.string().optional(),
+  })
+  .refine(
+    (q) => {
+      const hasDay = !!(q.day && q.day.trim().length > 0)
+      const hasRange = !!(q.from?.trim() && q.to?.trim())
+      return (hasDay && !hasRange) || (!hasDay && hasRange)
+    },
+    { message: 'Provide exactly one of: day, or from+to (ISO datetimes)' },
+  )
 
 const usersListSchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(50),
@@ -128,18 +142,61 @@ export async function handleV1Admin(
   }
   const corsH = c.headers
 
+  if (method === 'GET' && path === '/v1/admin/analytics/app-ids') {
+    const gate = await requireAdmin(event, baseHost, corsH)
+    if (!gate.ok) {
+      return gate.result
+    }
+    try {
+      const appIds = await listDistinctAppIds(4000)
+      return { statusCode: 200, headers: { ...corsH, ...JSON_HEADERS }, body: JSON.stringify({ appIds }) }
+    } catch {
+      return { statusCode: 500, headers: { ...corsH, ...JSON_HEADERS }, body: JSON.stringify({ error: 'server_error' }) }
+    }
+  }
+
   if (method === 'GET' && path === '/v1/admin/analytics/events') {
     const gate = await requireAdmin(event, baseHost, corsH)
     if (!gate.ok) {
       return gate.result
     }
-    const qs = event.queryStringParameters ?? {}
-    const p = qSchema.safeParse({ ...qs, cursor: qs.cursor })
+    const qsRaw = event.queryStringParameters ?? {}
+    const qs = {
+      ...qsRaw,
+      day: qsRaw.day?.trim() || undefined,
+      from: qsRaw.from?.trim() || undefined,
+      to: qsRaw.to?.trim() || undefined,
+    }
+    const p = analyticsEventsQuerySchema.safeParse(qs)
     if (!p.success) {
       return { statusCode: 400, headers: { ...corsH, ...JSON_HEADERS }, body: JSON.stringify({ error: 'bad_request' }) }
     }
-    const { appId, day, limit, cursor } = p.data
-    const r = await queryEventsByAppAndDay(appId, day, limit, cursor ?? null)
+    const { appId, limit, cursor } = p.data
+    if (p.data.day) {
+      const day = p.data.day.trim()
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+        return { statusCode: 400, headers: { ...corsH, ...JSON_HEADERS }, body: JSON.stringify({ error: 'bad_request' }) }
+      }
+      const r = await queryEventsByAppAndDay(appId, day, limit, cursor ?? null)
+      return { statusCode: 200, headers: { ...corsH, ...JSON_HEADERS }, body: JSON.stringify(r) }
+    }
+    const fromMs = Date.parse(p.data.from!)
+    const toMs = Date.parse(p.data.to!)
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
+      return {
+        statusCode: 400,
+        headers: { ...corsH, ...JSON_HEADERS },
+        body: JSON.stringify({ error: 'bad_request', message: 'Invalid from or to datetime' }),
+      }
+    }
+    if (toMs - fromMs > MAX_ANALYTICS_RANGE_MS) {
+      return {
+        statusCode: 400,
+        headers: { ...corsH, ...JSON_HEADERS },
+        body: JSON.stringify({ error: 'range_too_large' }),
+      }
+    }
+    const r = await queryEventsByAppAndTimeRange(appId, fromMs, toMs, limit)
     return { statusCode: 200, headers: { ...corsH, ...JSON_HEADERS }, body: JSON.stringify(r) }
   }
 

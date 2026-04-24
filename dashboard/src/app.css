@@ -90,6 +90,16 @@
   min-width: 10rem;
 }
 
+.dashboard__select {
+  width: 100%;
+  max-width: 100%;
+}
+
+input.m43-input[type='date'] {
+  width: 100%;
+  max-width: 16rem;
+}
+
 .dashboard__load {
   margin-top: 0.1rem;
 }
