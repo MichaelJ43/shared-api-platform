@@ -3,9 +3,14 @@ import type { APIGatewayProxyEventV2 } from 'aws-lambda'
 
 const requireSession = vi.hoisted(() => vi.fn())
 const queryEventsByAppAndDay = vi.hoisted(() => vi.fn())
+const getUserByEmail = vi.hoisted(() => vi.fn())
 
 vi.mock('./v1Auth', () => ({ requireSession }))
 vi.mock('./v1Admin', () => ({ queryEventsByAppAndDay }))
+vi.mock('./authStore', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('./authStore')>()
+  return { ...mod, getUserByEmail }
+})
 
 import { handleV1Admin } from './v1AdminHttp'
 
@@ -33,9 +38,18 @@ function ev(over: Partial<APIGatewayProxyEventV2>): APIGatewayProxyEventV2 {
   } as APIGatewayProxyEventV2
 }
 
+const adminUser = {
+  email: 'a@b.com',
+  userId: '1',
+  passwordHash: 'h',
+  createdAt: 't',
+  role: 'admin' as const,
+}
+
 describe('handleV1Admin', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    getUserByEmail.mockResolvedValue(adminUser)
   })
 
   it('returns null for non-admin paths', async () => {
@@ -83,6 +97,39 @@ describe('handleV1Admin', () => {
     )
     expect(r?.statusCode).toBe(401)
     expect(r?.cookies).toBeDefined()
+  })
+
+  it('403 when user is not admin', async () => {
+    requireSession.mockResolvedValue({ ok: true, userId: '1', email: 'a@b.com', sessionId: 's' })
+    getUserByEmail.mockResolvedValue({
+      email: 'a@b.com',
+      userId: '1',
+      passwordHash: 'h',
+      createdAt: 't',
+    })
+    const r = await handleV1Admin(
+      ev(),
+      'GET',
+      '/v1/admin/analytics/events',
+      'michaelj43.dev',
+      undefined,
+    )
+    expect(r?.statusCode).toBe(403)
+    expect(queryEventsByAppAndDay).not.toHaveBeenCalled()
+  })
+
+  it('401 when user row missing', async () => {
+    requireSession.mockResolvedValue({ ok: true, userId: '1', email: 'a@b.com', sessionId: 's' })
+    getUserByEmail.mockResolvedValue(null)
+    const r = await handleV1Admin(
+      ev(),
+      'GET',
+      '/v1/admin/analytics/events',
+      'michaelj43.dev',
+      undefined,
+    )
+    expect(r?.statusCode).toBe(401)
+    expect(r?.cookies?.length).toBeGreaterThan(0)
   })
 
   it('400 for bad query', async () => {

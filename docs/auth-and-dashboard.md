@@ -3,10 +3,10 @@
 ## API routes (Lambda, behind API Gateway)
 
 - **`POST /v1/auth/register`** — when `AUTH_ALLOW_REGISTER=true` in the Lambda environment. JSON body: `email`, `password`. Creates a user in DynamoDB (`auth_users`).
-- **`POST /v1/auth/login`** — JSON body: `email`, `password`, optional `returnUrl` (https only, same-site). Sets **`sap_session` HttpOnly** cookie; JSON response includes `user` and optional `returnUrl` echo.
+- **`POST /v1/auth/login`** — JSON body: `email`, `password`, optional `returnUrl` (https only, same-site). Sets **`sap_session` HttpOnly** cookie; JSON `user` includes `email`, `id`, and `role` (`admin` or `user`).
 - **`POST /v1/auth/logout`** — clears the session cookie and deletes the row in `auth_sessions`.
-- **`GET /v1/auth/me`** — returns `{ user, session }` if the session cookie is valid, else 401.
-- **`GET /v1/admin/analytics/events?appId=…&day=YYYY-MM-DD`** — same auth as `me` (valid session + role `admin` on the user). Returns items for that app and UTC calendar day.
+- **`GET /v1/auth/me`** — returns `{ user: { email, id, role } }` if the session cookie is valid and the user row exists, else 401 (clears cookie if the session is invalid).
+- **`GET /v1/admin/analytics/events?appId=…&day=YYYY-MM-DD`** — valid session plus **`role` = `admin`** on the `auth_users` item; otherwise **403** `forbidden`. Returns items for that app and UTC calendar day.
 - Ingest and health remain on existing paths: **`/analytics/events?v=1`**, **`/health`**.
 
 ## Environment variables (Lambda)
@@ -26,14 +26,16 @@
 
    ```bash
    export AUTH_USERS_TABLE_NAME=…
-   npm run auth:create-user -- you@example.com 'YourStr0ng!Pass'
+   npm run auth:create-user -- --admin you@example.com
    ```
 
-3. In DynamoDB, set **`role` = `admin`** on the user item if you need dashboard access.
+   Enter the password when prompted (or set `CREATE_USER_PASSWORD` for automation only). Omit `--admin` for a non-admin user.
+
+3. For an **existing** user, set attribute **`role`** = **`admin`** (string) on their item in `auth_users` in DynamoDB.
 
 ## Static sites (S3)
 
-Terraform can create private buckets when `auth_spa_domain` and `dashboard_spa_domain` are set; outputs: `auth_spa_s3_bucket`, `dashboard_spa_s3_bucket`. Build SPAs, then sync `dist/` (use your org’s org-wide website hosting runbook if applicable).
+Terraform can create private buckets when `auth_spa_domain` and `dashboard_spa_domain` are set; outputs: `auth_spa_s3_bucket`, `dashboard_spa_s3_bucket`. Build SPAs, then sync `dist/` (use your org’s org-wide website hosting runbook if applicable). The **analytics dashboard** loads optional **`m43-auth-header.js` from the static-assets CDN**; keep its mount and page shell aligned with the current [M43 integration](https://github.com/MichaelJ43/static-assets/blob/main/docs/M43_INTEGRATION.md) (e.g. full-width top bar, `data-m43-home-url`).
 
 ```bash
 cd auth-spa && npm ci && npm run build

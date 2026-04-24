@@ -10,7 +10,10 @@ const auth = vi.hoisted(() => ({
   createUser: vi.fn(),
 }))
 
-vi.mock('./authStore', () => auth)
+vi.mock('./authStore', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./authStore')>()
+  return { ...actual, ...auth }
+})
 
 import { handleV1Auth, requireSession } from './v1Auth'
 
@@ -133,7 +136,7 @@ describe('handleV1Auth', () => {
     )
     expect(r?.statusCode).toBe(200)
     const body = JSON.parse(r?.body ?? '{}')
-    expect(body.user).toEqual({ email: 'a@b.com', id: '1' })
+    expect(body.user).toEqual({ email: 'a@b.com', id: '1', role: 'user' })
     expect(r?.cookies?.length).toBeGreaterThan(0)
   })
 
@@ -194,6 +197,12 @@ describe('handleV1Auth', () => {
 
   it('GET /v1/auth/me 200', async () => {
     auth.getSession.mockResolvedValue({ userId: '1', email: 'a@b.com', expiresAt: Date.now() + 1000 })
+    auth.getUserByEmail.mockResolvedValue({
+      email: 'a@b.com',
+      userId: '1',
+      passwordHash: 'h',
+      createdAt: 't',
+    })
     const e = {
       ...baseEvent({
         headers: { origin: 'https://app.michaelj43.dev', cookie: 'sap_session=s1' },
@@ -207,6 +216,51 @@ describe('handleV1Auth', () => {
     } as APIGatewayProxyEventV2
     const r = await handleV1Auth(e, 'GET', '/v1/auth/me', 'michaelj43.dev', undefined)
     expect(r?.statusCode).toBe(200)
+    const body = JSON.parse(r?.body ?? '{}')
+    expect(body.user).toEqual({ email: 'a@b.com', id: '1', role: 'user' })
+  })
+
+  it('GET /v1/auth/me 200 admin role', async () => {
+    auth.getSession.mockResolvedValue({ userId: '1', email: 'a@b.com', expiresAt: Date.now() + 1000 })
+    auth.getUserByEmail.mockResolvedValue({
+      email: 'a@b.com',
+      userId: '1',
+      passwordHash: 'h',
+      createdAt: 't',
+      role: 'admin',
+    })
+    const e = {
+      ...baseEvent({
+        headers: { origin: 'https://app.michaelj43.dev', cookie: 'sap_session=s1' },
+        requestContext: {
+          ...baseEvent().requestContext,
+          http: { method: 'GET', path: '/v1/auth/me', protocol: 'HTTP/1.1' },
+        },
+        rawPath: '/v1/auth/me',
+        body: undefined,
+      }),
+    } as APIGatewayProxyEventV2
+    const r = await handleV1Auth(e, 'GET', '/v1/auth/me', 'michaelj43.dev', undefined)
+    expect(r?.statusCode).toBe(200)
+    expect(JSON.parse(r?.body ?? '{}').user.role).toBe('admin')
+  })
+
+  it('GET /v1/auth/me 401 when user row missing', async () => {
+    auth.getSession.mockResolvedValue({ userId: '1', email: 'a@b.com', expiresAt: Date.now() + 1000 })
+    auth.getUserByEmail.mockResolvedValue(null)
+    const e = {
+      ...baseEvent({
+        headers: { origin: 'https://app.michaelj43.dev', cookie: 'sap_session=s1' },
+        requestContext: {
+          ...baseEvent().requestContext,
+          http: { method: 'GET', path: '/v1/auth/me', protocol: 'HTTP/1.1' },
+        },
+        rawPath: '/v1/auth/me',
+        body: undefined,
+      }),
+    } as APIGatewayProxyEventV2
+    const r = await handleV1Auth(e, 'GET', '/v1/auth/me', 'michaelj43.dev', undefined)
+    expect(r?.statusCode).toBe(401)
   })
 
   it('register returns 404 when disabled', async () => {

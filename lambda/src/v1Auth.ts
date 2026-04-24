@@ -3,7 +3,15 @@ import { z } from 'zod'
 import { getCorsHeadersWithCredentials } from './cors'
 import { buildSessionCookie, parseCookies, SESSION_COOKIE_NAME } from './cookieUtil'
 import { firstAllowedOrDefault } from './returnUrl'
-import { createSession, createUser, deleteSession, getSession, getUserByEmail, verifyPassword } from './authStore'
+import {
+  createSession,
+  createUser,
+  deleteSession,
+  effectiveRole,
+  getSession,
+  getUserByEmail,
+  verifyPassword,
+} from './authStore'
 
 const JSON_HEADERS = { 'content-type': 'application/json' }
 
@@ -107,7 +115,12 @@ export async function handleV1Auth(
     const sess = await createSession({ email: user.email, userId: user.userId, passwordHash: user.passwordHash, createdAt: user.createdAt })
     const redirect = firstAllowedOrDefault(returnUrl, baseHost, defaultApp)
     const cookie = buildSessionCookie(sess.sessionId, cookieMax, domain)
-    return v1Json(200, { user: { email: user.email, id: user.userId }, redirect }, corsH, [cookie])
+    return v1Json(
+      200,
+      { user: { email: user.email, id: user.userId, role: effectiveRole(user) }, redirect },
+      corsH,
+      [cookie],
+    )
   }
 
   if (method === 'POST' && path === '/v1/auth/logout') {
@@ -132,7 +145,16 @@ export async function handleV1Auth(
     if (!s) {
       return v1Json(401, { error: 'unauthorized' }, corsH, [buildSessionCookie(null, 0, domain)])
     }
-    return v1Json(200, { user: { email: s.email, id: s.userId } }, corsH, null)
+    const user = await getUserByEmail(s.email)
+    if (!user) {
+      return v1Json(401, { error: 'unauthorized' }, corsH, [buildSessionCookie(null, 0, domain)])
+    }
+    return v1Json(
+      200,
+      { user: { email: user.email, id: user.userId, role: effectiveRole(user) } },
+      corsH,
+      null,
+    )
   }
 
   if (method === 'POST' && path === '/v1/auth/register') {
@@ -161,7 +183,12 @@ export async function handleV1Auth(
     const sess = await createSession(user)
     const redirect = firstAllowedOrDefault(returnUrl, baseHost, defaultApp)
     const cookie = buildSessionCookie(sess.sessionId, cookieMax, domain)
-    return v1Json(201, { user: { email: user.email, id: user.userId }, redirect }, corsH, [cookie])
+    return v1Json(
+      201,
+      { user: { email: user.email, id: user.userId, role: effectiveRole(user) }, redirect },
+      corsH,
+      [cookie],
+    )
   }
 
   if (path.startsWith('/v1/auth/')) {

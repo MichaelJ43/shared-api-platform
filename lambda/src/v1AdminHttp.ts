@@ -1,4 +1,6 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda'
+import { getUserByEmail, isAdminUser } from './authStore'
+import { buildSessionCookie } from './cookieUtil'
 import { getCorsHeadersWithCredentials } from './cors'
 import { z } from 'zod'
 import { queryEventsByAppAndDay } from './v1Admin'
@@ -50,6 +52,22 @@ export async function handleV1Admin(
         o.cookies = [session.clearCookie]
       }
       return o
+    }
+    const user = await getUserByEmail(session.email)
+    if (!user) {
+      const domain = baseHost.trim().toLowerCase()
+      const o: APIGatewayProxyResultV2 = {
+        statusCode: 401,
+        headers: { ...corsH, ...JSON_HEADERS },
+        body: JSON.stringify({ error: 'unauthorized' }),
+      }
+      if (domain) {
+        o.cookies = [buildSessionCookie(null, 0, domain)]
+      }
+      return o
+    }
+    if (!isAdminUser(user)) {
+      return { statusCode: 403, headers: { ...corsH, ...JSON_HEADERS }, body: JSON.stringify({ error: 'forbidden' }) }
     }
     const qs = event.queryStringParameters ?? {}
     const p = qSchema.safeParse({ ...qs, cursor: qs.cursor })

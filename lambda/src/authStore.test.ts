@@ -65,6 +65,40 @@ describe('getUserByEmail', () => {
     const u = await getUserByEmail('a@b.com')
     expect(u).toEqual({ email: 'a@b.com', userId: 'u1', passwordHash: 'h', createdAt: 't' })
   })
+
+  it('maps role admin when stored', async () => {
+    send.mockResolvedValueOnce({
+      Item: {
+        email: 'a@b.com',
+        userId: 'u1',
+        passwordHash: 'h',
+        createdAt: 't',
+        role: 'admin',
+      },
+    })
+    const u = await getUserByEmail('a@b.com')
+    expect(u).toEqual({
+      email: 'a@b.com',
+      userId: 'u1',
+      passwordHash: 'h',
+      createdAt: 't',
+      role: 'admin',
+    })
+  })
+
+  it('drops unknown role strings', async () => {
+    send.mockResolvedValueOnce({
+      Item: {
+        email: 'a@b.com',
+        userId: 'u1',
+        passwordHash: 'h',
+        createdAt: 't',
+        role: 'superuser',
+      },
+    })
+    const u = await getUserByEmail('a@b.com')
+    expect(u).toEqual({ email: 'a@b.com', userId: 'u1', passwordHash: 'h', createdAt: 't' })
+  })
 })
 
 describe('createUser', () => {

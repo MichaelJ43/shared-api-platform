@@ -9,6 +9,9 @@ const USERS = () => process.env.AUTH_USERS_TABLE_NAME ?? ''
 const SESSIONS = () => process.env.AUTH_SESSIONS_TABLE_NAME ?? ''
 const ttlSec = () => parseInt(process.env.AUTH_SESSION_TTL_SECONDS ?? '604800', 10) || 604800
 
+/** Stored on the user item in DynamoDB for dashboard / admin API access. */
+export const ADMIN_ROLE = 'admin' as const
+
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
 }
@@ -18,6 +21,16 @@ export type AuthUser = {
   userId: string
   passwordHash: string
   createdAt: string
+  /** Set to {@link ADMIN_ROLE} in DynamoDB (or via create-user --admin) for admin-only routes. */
+  role?: typeof ADMIN_ROLE
+}
+
+export function isAdminUser(user: AuthUser | null | undefined): boolean {
+  return user?.role === ADMIN_ROLE
+}
+
+export function effectiveRole(user: AuthUser): 'admin' | 'user' {
+  return isAdminUser(user) ? 'admin' : 'user'
 }
 
 export type SessionRow = {
@@ -50,11 +63,15 @@ export async function getUserByEmail(email: string): Promise<AuthUser | null> {
     return null
   }
   const o = r.Item as Record<string, unknown>
+  const roleRaw = o.role
+  const role =
+    typeof roleRaw === 'string' && roleRaw === ADMIN_ROLE ? ADMIN_ROLE : undefined
   return {
     email: o.email as string,
     userId: o.userId as string,
     passwordHash: o.passwordHash as string,
     createdAt: o.createdAt as string,
+    ...(role ? { role } : {}),
   }
 }
 
