@@ -1,7 +1,7 @@
 {
   "name": "shared-api-platform-lambda",
   "private": true,
-  "version": "0.0.14",
+  "version": "0.0.15",
   "type": "commonjs",
   "main": "dist/handler.js",
   "scripts": {
