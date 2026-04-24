@@ -1,4 +1,4 @@
-import { GetCommand, DeleteCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand, DeleteCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { documentClient } from './dynamoClient'
 import { randomBytes } from 'node:crypto'
 import { ulid } from 'ulid'
@@ -31,6 +31,88 @@ export function isAdminUser(user: AuthUser | null | undefined): boolean {
 
 export function effectiveRole(user: AuthUser): 'admin' | 'user' {
   return isAdminUser(user) ? 'admin' : 'user'
+}
+
+/** Public fields for admin user list (no password hash). */
+export type AuthUserListItem = {
+  email: string
+  userId: string
+  createdAt: string
+  role: 'admin' | 'user'
+}
+
+function itemToListEntry(o: Record<string, unknown>): AuthUserListItem | null {
+  const email = o.email
+  const userId = o.userId
+  const createdAt = o.createdAt
+  if (typeof email !== 'string' || typeof userId !== 'string' || typeof createdAt !== 'string') {
+    return null
+  }
+  const roleRaw = o.role
+  const role = roleRaw === ADMIN_ROLE ? ('admin' as const) : ('user' as const)
+  return { email, userId, createdAt, role }
+}
+
+export async function listAuthUsers(
+  limit: number,
+  exclusiveStartKey: Record<string, unknown> | undefined,
+): Promise<{ items: AuthUserListItem[]; lastKey: Record<string, unknown> | undefined }> {
+  const r = await documentClient.send(
+    new ScanCommand({
+      TableName: usersTable(),
+      Limit: limit,
+      ExclusiveStartKey: exclusiveStartKey,
+      ProjectionExpression: 'email, userId, createdAt, #r',
+      ExpressionAttributeNames: { '#r': 'role' },
+    }),
+  )
+  const items: AuthUserListItem[] = []
+  for (const raw of r.Items ?? []) {
+    const row = itemToListEntry(raw as Record<string, unknown>)
+    if (row) {
+      items.push(row)
+    }
+  }
+  items.sort((a, b) => a.email.localeCompare(b.email))
+  return { items, lastKey: r.LastEvaluatedKey as Record<string, unknown> | undefined }
+}
+
+export async function setUserRole(
+  email: string,
+  role: 'admin' | 'user',
+): Promise<{ ok: true } | { ok: false; error: 'not_found' }> {
+  const e = normalizeEmail(email)
+  try {
+    if (role === 'admin') {
+      await documentClient.send(
+        new UpdateCommand({
+          TableName: usersTable(),
+          Key: { email: e },
+          UpdateExpression: 'SET #r = :a',
+          ExpressionAttributeNames: { '#r': 'role' },
+          ExpressionAttributeValues: { ':a': ADMIN_ROLE },
+          ConditionExpression: 'attribute_exists(email)',
+        }),
+      )
+    } else {
+      await documentClient.send(
+        new UpdateCommand({
+          TableName: usersTable(),
+          Key: { email: e },
+          UpdateExpression: 'REMOVE #r',
+          ExpressionAttributeNames: { '#r': 'role' },
+          ConditionExpression: 'attribute_exists(email)',
+        }),
+      )
+    }
+    return { ok: true }
+  } catch (err: unknown) {
+    const name = (err as { name?: string }).name
+    if (name === 'ConditionalCheckFailedException') {
+      return { ok: false, error: 'not_found' }
+    }
+    throw err
+  }
 }
 
 export type SessionRow = {

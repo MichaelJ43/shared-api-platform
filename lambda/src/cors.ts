@@ -35,7 +35,7 @@ function buildCorsBaseHeaders(
 ): Record<string, string> {
   const h: Record<string, string> = {
     'access-control-allow-origin': requestOrigin,
-    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS',
     'access-control-allow-headers': 'content-type,origin,authorization',
     'access-control-max-age': '600',
     vary: 'Origin',

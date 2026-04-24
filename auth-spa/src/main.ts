@@ -13,6 +13,7 @@ app.innerHTML = `
       <p><button type="submit" style="width:100%;padding:0.5rem">Sign in</button></p>
     </form>
     <p id="err" style="color:#b00;font-size:0.9rem;min-height:1.2rem"></p>
+    <p style="font-size:0.9rem"><a href="/signup.html">Create an account</a></p>
   </main>
 `
 

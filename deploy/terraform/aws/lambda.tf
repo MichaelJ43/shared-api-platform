@@ -17,20 +17,28 @@ resource "aws_lambda_function" "http" {
 
   environment {
     variables = {
-      EVENTS_TABLE_NAME         = aws_dynamodb_table.analytics_events.name
-      AUTH_USERS_TABLE_NAME     = aws_dynamodb_table.auth_users.name
-      AUTH_SESSIONS_TABLE_NAME  = aws_dynamodb_table.auth_sessions.name
-      EVENTS_TTL_OFFSET_SECONDS = tostring(var.analytics_item_ttl_offset_seconds)
-      AUTH_SESSION_TTL_SECONDS  = tostring(var.auth_session_ttl_seconds)
-      AUTH_ALLOW_REGISTER       = tostring(var.auth_allow_register)
-      AUTH_DEFAULT_APP_URL      = var.auth_default_app_url
-      CORS_ALLOWED_BASE_HOST    = var.cors_allowed_base_host
-      CORS_ALLOW_LOCALHOST      = var.cors_allow_localhost
-      IP_HASH_SECRET            = var.ip_hash_secret
-      APP_VERSION               = var.app_version
+      EVENTS_TABLE_NAME            = aws_dynamodb_table.analytics_events.name
+      AUTH_USERS_TABLE_NAME        = aws_dynamodb_table.auth_users.name
+      AUTH_SESSIONS_TABLE_NAME     = aws_dynamodb_table.auth_sessions.name
+      PLATFORM_SETTINGS_TABLE_NAME = aws_dynamodb_table.platform_settings.name
+      EVENTS_TTL_OFFSET_SECONDS    = tostring(var.analytics_item_ttl_offset_seconds)
+      AUTH_SESSION_TTL_SECONDS     = tostring(var.auth_session_ttl_seconds)
+      AUTH_ALLOW_REGISTER          = tostring(var.auth_allow_register)
+      AUTH_DEFAULT_APP_URL         = var.auth_default_app_url
+      CORS_ALLOWED_BASE_HOST       = var.cors_allowed_base_host
+      CORS_ALLOW_LOCALHOST         = var.cors_allow_localhost
+      IP_HASH_SECRET               = var.ip_hash_secret
+      APP_VERSION                  = var.app_version
     }
   }
 
-  depends_on = [aws_cloudwatch_log_group.http]
-  tags       = local.common_tags
+  # Tables must exist before Lambda is updated with new env (e.g. first apply adding platform_settings).
+  depends_on = [
+    aws_cloudwatch_log_group.http,
+    aws_dynamodb_table.analytics_events,
+    aws_dynamodb_table.auth_users,
+    aws_dynamodb_table.auth_sessions,
+    aws_dynamodb_table.platform_settings,
+  ]
+  tags = local.common_tags
 }

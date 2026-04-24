@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { DeleteCommand, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
+import { DeleteCommand, GetCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 
 const send = vi.fn()
 
@@ -23,7 +23,9 @@ import {
   getSession,
   getUserByEmail,
   hashPasswordForScript,
+  listAuthUsers,
   normalizeEmail,
+  setUserRole,
   verifyPassword,
 } from './authStore'
 
@@ -98,6 +100,58 @@ describe('getUserByEmail', () => {
     })
     const u = await getUserByEmail('a@b.com')
     expect(u).toEqual({ email: 'a@b.com', userId: 'u1', passwordHash: 'h', createdAt: 't' })
+  })
+})
+
+describe('listAuthUsers', () => {
+  beforeEach(() => {
+    process.env.AUTH_USERS_TABLE_NAME = 'users-t'
+    process.env.AUTH_SESSIONS_TABLE_NAME = 'sess-t'
+    send.mockReset()
+  })
+
+  it('returns sorted summaries', async () => {
+    send.mockResolvedValueOnce({
+      Items: [
+        { email: 'b@b.com', userId: '2', createdAt: 't2', role: 'admin' },
+        { email: 'a@b.com', userId: '1', createdAt: 't1' },
+      ],
+    })
+    const r = await listAuthUsers(50, undefined)
+    expect(send).toHaveBeenCalledWith(expect.any(ScanCommand))
+    expect(r.items).toEqual([
+      { email: 'a@b.com', userId: '1', createdAt: 't1', role: 'user' },
+      { email: 'b@b.com', userId: '2', createdAt: 't2', role: 'admin' },
+    ])
+  })
+})
+
+describe('setUserRole', () => {
+  beforeEach(() => {
+    process.env.AUTH_USERS_TABLE_NAME = 'users-t'
+    process.env.AUTH_SESSIONS_TABLE_NAME = 'sess-t'
+    send.mockReset()
+  })
+
+  it('sets admin', async () => {
+    send.mockResolvedValueOnce({})
+    const r = await setUserRole('A@b.com', 'admin')
+    expect(r).toEqual({ ok: true })
+    expect(send).toHaveBeenCalledWith(expect.any(UpdateCommand))
+  })
+
+  it('removes role for user', async () => {
+    send.mockResolvedValueOnce({})
+    const r = await setUserRole('a@b.com', 'user')
+    expect(r).toEqual({ ok: true })
+    const cmd = send.mock.calls[0][0] as UpdateCommand
+    expect(cmd.input.UpdateExpression).toMatch(/REMOVE/)
+  })
+
+  it('maps missing user to not_found', async () => {
+    send.mockRejectedValueOnce(Object.assign(new Error('cc'), { name: 'ConditionalCheckFailedException' }))
+    const r = await setUserRole('nope@b.com', 'admin')
+    expect(r).toEqual({ ok: false, error: 'not_found' })
   })
 })
 

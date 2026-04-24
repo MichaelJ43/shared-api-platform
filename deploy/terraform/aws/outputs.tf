@@ -17,6 +17,11 @@ output "events_table" {
   value = aws_dynamodb_table.analytics_events.name
 }
 
+output "platform_settings_table" {
+  value       = aws_dynamodb_table.platform_settings.name
+  description = "Site-wide feature flags (e.g. allowRegister); item id 'default' created on first admin update."
+}
+
 output "lambda_function" {
   value = aws_lambda_function.http.arn
 }

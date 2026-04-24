@@ -86,7 +86,12 @@ variable "auth_session_ttl_seconds" {
 variable "auth_allow_register" {
   type        = bool
   default     = false
-  description = "If true, enables POST /v1/auth/register in Lambda (guard in prod carefully)."
+  description = <<-EOT
+    Infrastructure gate for self-serve sign-up. When true, admins may open or close registration via
+    platform_settings (dashboard Users page or PATCH /v1/admin/site). When false, sign-up stays off regardless
+    of that preference. No manual DynamoDB setup: apply creates the platform_settings table; the config row
+    is created on first admin toggle.
+  EOT
 }
 
 variable "auth_default_app_url" {

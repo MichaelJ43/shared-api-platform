@@ -51,6 +51,25 @@ data "aws_iam_policy_document" "lambda_inline" {
       aws_dynamodb_table.auth_sessions.arn,
     ]
   }
+
+  statement {
+    sid     = "DynamoAuthUsersScan"
+    actions = ["dynamodb:Scan"]
+    resources = [
+      aws_dynamodb_table.auth_users.arn,
+    ]
+  }
+
+  statement {
+    sid = "DynamoPlatformSettings"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:UpdateItem",
+    ]
+    resources = [
+      aws_dynamodb_table.platform_settings.arn,
+    ]
+  }
 }
 
 resource "aws_iam_role_policy" "lambda_inline" {

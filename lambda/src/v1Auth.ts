@@ -12,6 +12,7 @@ import {
   getUserByEmail,
   verifyPassword,
 } from './authStore'
+import { isRegistrationOpen } from './platformSettings'
 
 const JSON_HEADERS = { 'content-type': 'application/json' }
 
@@ -81,7 +82,7 @@ export async function handleV1Auth(
 ): Promise<APIGatewayProxyResultV2 | null> {
   const c = corsV1(event, baseHost, localhost)
   if (!c.allow) {
-    if (path.startsWith('/v1/') && (method === 'GET' || method === 'POST')) {
+    if (path.startsWith('/v1/') && (method === 'GET' || method === 'POST' || method === 'PATCH')) {
       return { statusCode: 403, body: 'Forbidden' }
     }
     return null
@@ -89,7 +90,6 @@ export async function handleV1Auth(
   const corsH = c.headers
   const domain = cookieDomainForSetCookie(baseHost)
   const defaultApp = (process.env.AUTH_DEFAULT_APP_URL ?? '').trim()
-  const allowRegister = (process.env.AUTH_ALLOW_REGISTER ?? 'false') === 'true'
   const cookieMax = parseInt(process.env.AUTH_SESSION_TTL_SECONDS ?? '604800', 10) || 604800
 
   if (method === 'POST' && path === '/v1/auth/login') {
@@ -158,7 +158,7 @@ export async function handleV1Auth(
   }
 
   if (method === 'POST' && path === '/v1/auth/register') {
-    if (!allowRegister) {
+    if (!(await isRegistrationOpen())) {
       return v1Json(404, { error: 'not_found' }, corsH, null)
     }
     let raw: unknown
