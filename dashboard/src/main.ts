@@ -5,6 +5,8 @@ const AUTH = (import.meta.env.VITE_AUTH_ORIGIN ?? 'https://auth.michaelj43.dev')
 
 const app = document.getElementById('app')!
 
+let currentUser: { email: string; id: string; role: 'admin' | 'user' } | null = null
+
 function signInHref(): string {
   const here = new URL(window.location.href)
   return `${AUTH}/?returnUrl=${encodeURIComponent(here.toString())}`
@@ -51,9 +53,54 @@ function escapeAttr(s: string): string {
     .replace(/>/g, '&gt;')
 }
 
-/** Authenticated view: sign out lives in the m43 auth header (same API/cookies as this page). */
-function render() {
+function escapeHtml(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function currentView(): 'analytics' | 'users' {
+  const h = window.location.hash.replace(/^#/, '').trim()
+  return h === 'users' ? 'users' : 'analytics'
+}
+
+function renderAdminShell(u: { email: string; id: string; role: 'admin' }) {
+  currentUser = u
+  const view = currentView()
   app.innerHTML = `
+    <nav class="dashboard__nav" aria-label="Sections">
+      <a href="#analytics" class="dashboard__nav-link ${view === 'analytics' ? 'dashboard__nav-link--active' : ''}">Analytics</a>
+      <a href="#users" class="dashboard__nav-link ${view === 'users' ? 'dashboard__nav-link--active' : ''}">Users</a>
+    </nav>
+    <div id="view"></div>
+  `
+  window.removeEventListener('hashchange', onHashChange)
+  window.addEventListener('hashchange', onHashChange)
+  mountView()
+}
+
+function onHashChange() {
+  const v = currentView()
+  for (const a of app.querySelectorAll('.dashboard__nav-link')) {
+    const el = a as HTMLAnchorElement
+    const isUsers = el.getAttribute('href') === '#users'
+    el.classList.toggle('dashboard__nav-link--active', (isUsers && v === 'users') || (!isUsers && v === 'analytics'))
+  }
+  mountView()
+}
+
+function mountView() {
+  const container = document.getElementById('view')
+  if (!container) {
+    return
+  }
+  if (currentView() === 'users') {
+    renderUsersView(container)
+  } else {
+    renderAnalyticsView(container)
+  }
+}
+
+function renderAnalyticsView(container: HTMLElement) {
+  container.innerHTML = `
     <p class="m43-intro dashboard__tight">
       Administrator session — use the header to sign out.
     </p>
@@ -75,22 +122,283 @@ function render() {
       <div id="tbl" role="status" aria-live="polite"></div>
     </section>
   `
-  app.querySelector('#load')?.addEventListener('click', () => void loadRows())
+  container.querySelector('#load')?.addEventListener('click', () => void loadRows())
   const today = new Date()
   const y = today.getUTCFullYear()
   const mo = String(today.getUTCMonth() + 1).padStart(2, '0')
   const d = String(today.getUTCDate()).padStart(2, '0')
-  ;(app.querySelector('#day') as HTMLInputElement).value = `${y}-${mo}-${d}`
+  ;(container.querySelector('#day') as HTMLInputElement).value = `${y}-${mo}-${d}`
 }
 
-function escapeHtml(s: string) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+type UserRow = { email: string; userId: string; createdAt: string; role: 'admin' | 'user' }
+
+let usersListCache: UserRow[] = []
+let usersNextCursor: string | null = null
+
+function renderUsersView(container: HTMLElement) {
+  container.innerHTML = `
+    <section class="dashboard__reg-panel" aria-labelledby="reg-heading">
+      <h2 class="m43-section-title" id="reg-heading">Self-service sign-up</h2>
+      <p class="m43-intro dashboard__tight">
+        Controls whether <strong>signup.html</strong> on the auth site can create new accounts. Infrastructure must also allow registration.
+      </p>
+      <div id="reg-status" role="status" aria-live="polite"></div>
+      <div class="dashboard__reg-toggle">
+        <label class="dashboard__reg-label">
+          <input type="checkbox" id="reg-open" />
+          <span>Allow new accounts via sign-up page</span>
+        </label>
+      </div>
+      <p id="reg-hint" class="m43-intro dashboard__reg-hint"></p>
+    </section>
+    <section aria-labelledby="users-heading">
+      <h2 class="m43-section-title" id="users-heading">Users</h2>
+      <p class="m43-intro dashboard__tight">
+        Grant or remove <strong>admin</strong> (analytics API and this dashboard). You cannot remove your own admin role here.
+      </p>
+      <div id="users-status" role="status" aria-live="polite"></div>
+      <div id="users-table-wrap"></div>
+      <div id="users-more" class="dashboard__users-more"></div>
+    </section>
+  `
+  const wrap = container.querySelector('#users-table-wrap') as HTMLElement
+  wrap.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('button[data-action]') as HTMLButtonElement | null
+    if (!btn?.dataset.action || !btn.dataset.email) {
+      return
+    }
+    void patchUserRole(btn.dataset.email, btn.dataset.action === 'promote' ? 'admin' : 'user')
+  })
+  void loadSiteRegistrationUi()
+  void loadUsersInitial()
+}
+
+type SiteRegistration = {
+  effective: boolean
+  envAllowsRegister: boolean
+  preference: boolean
+}
+
+async function loadSiteRegistrationUi() {
+  const regStatus = document.getElementById('reg-status')
+  const hint = document.getElementById('reg-hint')
+  const cb = document.getElementById('reg-open') as HTMLInputElement | null
+  if (!regStatus || !hint || !cb) {
+    return
+  }
+  regStatus.textContent = 'Loading…'
+  const r = await fetch(`${API}/v1/admin/site`, { credentials: 'include' })
+  regStatus.textContent = ''
+  if (r.status === 401 || r.status === 403) {
+    regStatus.innerHTML = `<p class="m43-message--error" role="alert">Could not load site settings.</p>`
+    cb.disabled = true
+    return
+  }
+  const j = (await r.json()) as { site: SiteRegistration }
+  const s = j.site
+  cb.checked = s.preference
+  cb.disabled = !s.envAllowsRegister
+  cb.onchange = () => {
+    void patchSiteRegistration(cb.checked)
+  }
+  if (!s.envAllowsRegister) {
+    hint.innerHTML =
+      '<strong>Infrastructure lock:</strong> <code>AUTH_ALLOW_REGISTER</code> is off in Lambda. Set <code>auth_allow_register = true</code> in Terraform (then apply) before this toggle can turn sign-up on.'
+  } else if (s.effective) {
+    hint.textContent = 'Sign-up is open: new users can register on the auth site.'
+  } else {
+    hint.textContent =
+      'Sign-up is closed: the sign-up page will show an error until you enable this option.'
+  }
+}
+
+async function patchSiteRegistration(allowRegister: boolean) {
+  const regStatus = document.getElementById('reg-status')
+  const cb = document.getElementById('reg-open') as HTMLInputElement | null
+  const hint = document.getElementById('reg-hint')
+  if (regStatus) {
+    regStatus.textContent = 'Saving…'
+  }
+  const r = await fetch(`${API}/v1/admin/site`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ allowRegister }),
+  })
+  if (regStatus) {
+    regStatus.textContent = ''
+  }
+  if (r.status === 403) {
+    const j = (await r.json().catch(() => ({}))) as { error?: string }
+    if (j.error === 'registration_locked_by_env' && regStatus) {
+      regStatus.innerHTML = `<p class="m43-message--error" role="alert">Cannot change: registration is disabled in infrastructure.</p>`
+    }
+    if (cb) {
+      cb.checked = !allowRegister
+    }
+    return
+  }
+  if (!r.ok) {
+    if (regStatus) {
+      regStatus.innerHTML = `<p class="m43-message--error" role="alert">Could not save (${r.status}).</p>`
+    }
+    if (cb) {
+      cb.checked = !allowRegister
+    }
+    return
+  }
+  const j = (await r.json()) as { site: SiteRegistration }
+  const s = j.site
+  if (cb) {
+    cb.checked = s.preference
+  }
+  if (hint) {
+    if (!s.envAllowsRegister) {
+      hint.innerHTML =
+        '<strong>Infrastructure lock:</strong> <code>AUTH_ALLOW_REGISTER</code> is off in Lambda.'
+    } else if (s.effective) {
+      hint.textContent = 'Sign-up is open: new users can register on the auth site.'
+    } else {
+      hint.textContent =
+        'Sign-up is closed: the sign-up page will show an error until you enable this option.'
+    }
+  }
+}
+
+function renderUsersTable(rows: UserRow[]) {
+  const wrap = document.getElementById('users-table-wrap')
+  if (!wrap) {
+    return
+  }
+  const meEmail = currentUser?.email ?? ''
+  const body = rows
+    .map((row) => {
+      const isSelf = row.email === meEmail
+      const btn =
+        row.role === 'admin'
+          ? `<button type="button" class="m43-button" data-action="demote" data-email="${escapeAttr(row.email)}" ${
+              isSelf ? 'disabled title="Use another admin to remove your role"' : ''
+            }>Remove admin</button>`
+          : `<button type="button" class="m43-button m43-button--primary" data-action="promote" data-email="${escapeAttr(row.email)}">Make admin</button>`
+      return `<tr>
+        <td>${escapeHtml(row.email)}</td>
+        <td>${escapeHtml(row.role)}</td>
+        <td class="dashboard__cell-muted">${escapeHtml(row.createdAt)}</td>
+        <td class="dashboard__user-actions">${btn}</td>
+      </tr>`
+    })
+    .join('')
+  wrap.innerHTML = `<div class="dashboard__table-wrap"><table class="m43-table">
+    <thead><tr>
+      <th scope="col">Email</th>
+      <th scope="col">Role</th>
+      <th scope="col">Created</th>
+      <th scope="col">Actions</th>
+    </tr></thead>
+    <tbody>${body}</tbody>
+  </table></div>`
+}
+
+async function loadUsersInitial() {
+  const status = document.getElementById('users-status')
+  const more = document.getElementById('users-more')
+  if (!status || !more) {
+    return
+  }
+  usersListCache = []
+  usersNextCursor = null
+  status.textContent = 'Loading…'
+  more.innerHTML = ''
+  const u = new URL(`${API}/v1/admin/users`)
+  u.searchParams.set('limit', '50')
+  const r = await fetch(u.toString(), { credentials: 'include' })
+  if (r.status === 401) {
+    status.innerHTML = `<p class="m43-message--error" role="alert">Not signed in.</p>`
+    return
+  }
+  if (r.status === 403) {
+    status.innerHTML = `<p class="m43-message--error" role="alert">Not allowed.</p>`
+    return
+  }
+  const j = (await r.json()) as { items: UserRow[]; nextCursor: string | null }
+  usersListCache = j.items
+  usersNextCursor = j.nextCursor
+  status.textContent = usersListCache.length ? '' : 'No users found.'
+  renderUsersTable(usersListCache)
+  if (j.nextCursor) {
+    more.innerHTML = `<button type="button" class="m43-button" id="users-load-more">Load more</button>`
+    document.getElementById('users-load-more')?.addEventListener('click', () => void loadUsersMore())
+  }
+}
+
+async function loadUsersMore() {
+  if (!usersNextCursor) {
+    return
+  }
+  const status = document.getElementById('users-status')
+  const more = document.getElementById('users-more')
+  if (!status || !more) {
+    return
+  }
+  const u = new URL(`${API}/v1/admin/users`)
+  u.searchParams.set('limit', '50')
+  u.searchParams.set('cursor', usersNextCursor)
+  const r = await fetch(u.toString(), { credentials: 'include' })
+  if (!r.ok) {
+    status.textContent = 'Could not load more users.'
+    return
+  }
+  const j = (await r.json()) as { items: UserRow[]; nextCursor: string | null }
+  usersListCache.push(...j.items)
+  usersNextCursor = j.nextCursor
+  renderUsersTable(usersListCache)
+  more.innerHTML = ''
+  if (j.nextCursor) {
+    more.innerHTML = `<button type="button" class="m43-button" id="users-load-more">Load more</button>`
+    document.getElementById('users-load-more')?.addEventListener('click', () => void loadUsersMore())
+  }
+}
+
+async function patchUserRole(email: string, role: 'admin' | 'user') {
+  const status = document.getElementById('users-status')
+  if (status) {
+    status.textContent = 'Saving…'
+  }
+  const r = await fetch(`${API}/v1/admin/users`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ email, role }),
+  })
+  if (status) {
+    status.textContent = ''
+  }
+  if (r.status === 400) {
+    const j = (await r.json().catch(() => ({}))) as { error?: string }
+    if (j.error === 'cannot_demote_self') {
+      if (status) {
+        status.innerHTML = `<p class="m43-message--error" role="alert">You cannot remove your own admin role.</p>`
+      }
+      return
+    }
+  }
+  if (!r.ok) {
+    if (status) {
+      status.innerHTML = `<p class="m43-message--error" role="alert">Update failed (${r.status}).</p>`
+    }
+    return
+  }
+  await loadUsersInitial()
 }
 
 async function loadRows() {
-  const appId = (app.querySelector('#appId') as HTMLInputElement).value.trim()
-  const day = (app.querySelector('#day') as HTMLInputElement).value.trim()
-  const tbl = app.querySelector('#tbl') as HTMLDivElement
+  const root = document.getElementById('view')
+  const appId = (root?.querySelector('#appId') as HTMLInputElement)?.value.trim() ?? ''
+  const day = (root?.querySelector('#day') as HTMLInputElement)?.value.trim() ?? ''
+  const tbl = root?.querySelector('#tbl') as HTMLDivElement
+  if (!tbl) {
+    return
+  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
     tbl.innerHTML =
       '<p class="m43-message--error" role="alert">Invalid day. Use YYYY-MM-DD (UTC).</p>'
@@ -156,7 +464,7 @@ async function loadRows() {
     renderNotAdmin()
     return
   }
-  render()
+  renderAdminShell(u)
 })().catch(() => {
   app.innerHTML = '<p class="m43-message--error" role="alert">Error loading the dashboard. Try again.</p>'
 })

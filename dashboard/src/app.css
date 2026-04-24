@@ -1,5 +1,77 @@
 /* Product-only layout; m43 base styles load from static.michaelj43.dev in index.html. */
 
+.dashboard__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--m43-border, rgba(0, 0, 0, 0.12));
+}
+
+.dashboard__nav-link {
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--m43-fg-muted, #555);
+  padding: 0.25rem 0;
+}
+
+.dashboard__nav-link:hover {
+  color: var(--m43-fg, inherit);
+}
+
+.dashboard__nav-link--active {
+  color: var(--m43-fg, inherit);
+  border-bottom: 2px solid var(--m43-accent, currentColor);
+  margin-bottom: -2px;
+}
+
+.dashboard__user-actions {
+  white-space: nowrap;
+}
+
+.dashboard__user-actions .m43-button {
+  margin-right: 0;
+}
+
+.dashboard__cell-muted {
+  font-size: 0.85rem;
+  color: var(--m43-muted, #666);
+}
+
+.dashboard__users-more {
+  margin-top: 0.75rem;
+}
+
+.dashboard__reg-panel {
+  margin-bottom: 2rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--m43-border, rgba(0, 0, 0, 0.12));
+}
+
+.dashboard__reg-toggle {
+  margin: 0.5rem 0;
+}
+
+.dashboard__reg-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.dashboard__reg-label input {
+  margin-top: 0.2rem;
+}
+
+.dashboard__reg-hint {
+  font-size: 0.9rem;
+  color: var(--m43-muted, #666);
+  margin-bottom: 0;
+}
+
 .dashboard__signed-out p:last-child {
   margin-top: 0.75rem;
 }

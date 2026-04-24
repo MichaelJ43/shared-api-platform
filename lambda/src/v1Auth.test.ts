@@ -15,6 +15,14 @@ vi.mock('./authStore', async (importOriginal) => {
   return { ...actual, ...auth }
 })
 
+const platform = vi.hoisted(() => ({
+  isRegistrationOpen: vi.fn(),
+}))
+
+vi.mock('./platformSettings', () => ({
+  isRegistrationOpen: platform.isRegistrationOpen,
+}))
+
 import { handleV1Auth, requireSession } from './v1Auth'
 
 function baseEvent(over: Partial<APIGatewayProxyEventV2> = {}): APIGatewayProxyEventV2 {
@@ -48,6 +56,7 @@ describe('handleV1Auth', () => {
     process.env.AUTH_DEFAULT_APP_URL = 'https://app.michaelj43.dev'
     process.env.AUTH_ALLOW_REGISTER = 'false'
     process.env.AUTH_SESSION_TTL_SECONDS = '3600'
+    platform.isRegistrationOpen.mockResolvedValue(false)
   })
 
   it('rejects CORS for bad origin with 403 on POST /v1/auth/', async () => {
@@ -281,8 +290,29 @@ describe('handleV1Auth', () => {
     expect(r?.statusCode).toBe(404)
   })
 
+  it('register 404 when env allows but site preference off', async () => {
+    process.env.AUTH_ALLOW_REGISTER = 'true'
+    platform.isRegistrationOpen.mockResolvedValue(false)
+    const r = await handleV1Auth(
+      baseEvent({
+        body: JSON.stringify({ email: 'n@b.com', password: 'Valid1!@#ab' }),
+        requestContext: {
+          ...baseEvent().requestContext,
+          http: { method: 'POST', path: '/v1/auth/register', protocol: 'HTTP/1.1' },
+        },
+        rawPath: '/v1/auth/register',
+      }) as APIGatewayProxyEventV2,
+      'POST',
+      '/v1/auth/register',
+      'michaelj43.dev',
+      undefined,
+    )
+    expect(r?.statusCode).toBe(404)
+  })
+
   it('register 201 when enabled', async () => {
     process.env.AUTH_ALLOW_REGISTER = 'true'
+    platform.isRegistrationOpen.mockResolvedValue(true)
     auth.createUser.mockResolvedValue({
       ok: true,
       user: { email: 'n@b.com', userId: 'u', passwordHash: 'h', createdAt: 't' },
@@ -307,6 +337,7 @@ describe('handleV1Auth', () => {
 
   it('register maps invalid password to 400', async () => {
     process.env.AUTH_ALLOW_REGISTER = 'true'
+    platform.isRegistrationOpen.mockResolvedValue(true)
     auth.createUser.mockResolvedValue({ ok: false, error: 'invalid_password' })
     const r = await handleV1Auth(
       baseEvent({

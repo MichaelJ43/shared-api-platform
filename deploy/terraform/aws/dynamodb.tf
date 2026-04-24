@@ -64,3 +64,20 @@ resource "aws_dynamodb_table" "auth_sessions" {
 
   tags = local.common_tags
 }
+
+resource "aws_dynamodb_table" "platform_settings" {
+  name         = "${local.name}-platform-settings"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = false
+  }
+
+  tags = local.common_tags
+}
