@@ -1,8 +1,8 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda'
-import { z } from 'zod'
 import { getCorsHeadersWithCredentials } from './cors'
 import { buildSessionCookie, parseCookies, SESSION_COOKIE_NAME } from './cookieUtil'
 import { firstAllowedOrDefault } from './returnUrl'
+import { authBody, registerBody } from './authValidation'
 import {
   createSession,
   createUser,
@@ -15,14 +15,6 @@ import {
 import { isRegistrationOpen } from './platformSettings'
 
 const JSON_HEADERS = { 'content-type': 'application/json' }
-
-const authBody = z.object({
-  email: z.string().min(1).max(256),
-  password: z.string().min(1).max(400),
-  returnUrl: z.string().url().optional(),
-})
-
-const registerBody = authBody
 
 function v1Json(
   status: number,
