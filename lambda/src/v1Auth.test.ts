@@ -275,7 +275,7 @@ describe('handleV1Auth', () => {
   it('register returns 404 when disabled', async () => {
     const r = await handleV1Auth(
       baseEvent({
-        body: JSON.stringify({ email: 'n@b.com', password: 'Valid1!@#ab' }),
+        body: JSON.stringify({ email: 'n@b.com', password: 'Valid1!@#ab12' }),
         requestContext: {
           ...baseEvent().requestContext,
           http: { method: 'POST', path: '/v1/auth/register', protocol: 'HTTP/1.1' },
@@ -295,7 +295,7 @@ describe('handleV1Auth', () => {
     platform.isRegistrationOpen.mockResolvedValue(false)
     const r = await handleV1Auth(
       baseEvent({
-        body: JSON.stringify({ email: 'n@b.com', password: 'Valid1!@#ab' }),
+        body: JSON.stringify({ email: 'n@b.com', password: 'Valid1!@#ab12' }),
         requestContext: {
           ...baseEvent().requestContext,
           http: { method: 'POST', path: '/v1/auth/register', protocol: 'HTTP/1.1' },
@@ -320,7 +320,7 @@ describe('handleV1Auth', () => {
     auth.createSession.mockResolvedValue({ sessionId: 'ns', maxAge: 1, expiresAt: 1, ttl: 1 })
     const r = await handleV1Auth(
       baseEvent({
-        body: JSON.stringify({ email: 'n@b.com', password: 'Valid1!@#ab' }),
+        body: JSON.stringify({ email: 'n@b.com', password: 'Valid1!@#ab12' }),
         requestContext: {
           ...baseEvent().requestContext,
           http: { method: 'POST', path: '/v1/auth/register', protocol: 'HTTP/1.1' },
@@ -335,13 +335,55 @@ describe('handleV1Auth', () => {
     expect(r?.statusCode).toBe(201)
   })
 
+  it('register rejects invalid email before creating a user', async () => {
+    process.env.AUTH_ALLOW_REGISTER = 'true'
+    platform.isRegistrationOpen.mockResolvedValue(true)
+    const r = await handleV1Auth(
+      baseEvent({
+        body: JSON.stringify({ email: 'not-an-email', password: 'Valid1!@#ab12' }),
+        requestContext: {
+          ...baseEvent().requestContext,
+          http: { method: 'POST', path: '/v1/auth/register', protocol: 'HTTP/1.1' },
+        },
+        rawPath: '/v1/auth/register',
+      }) as APIGatewayProxyEventV2,
+      'POST',
+      '/v1/auth/register',
+      'michaelj43.dev',
+      undefined,
+    )
+    expect(r?.statusCode).toBe(400)
+    expect(auth.createUser).not.toHaveBeenCalled()
+  })
+
+  it('register rejects weak password before creating a user', async () => {
+    process.env.AUTH_ALLOW_REGISTER = 'true'
+    platform.isRegistrationOpen.mockResolvedValue(true)
+    const r = await handleV1Auth(
+      baseEvent({
+        body: JSON.stringify({ email: 'n@b.com', password: 'short' }),
+        requestContext: {
+          ...baseEvent().requestContext,
+          http: { method: 'POST', path: '/v1/auth/register', protocol: 'HTTP/1.1' },
+        },
+        rawPath: '/v1/auth/register',
+      }) as APIGatewayProxyEventV2,
+      'POST',
+      '/v1/auth/register',
+      'michaelj43.dev',
+      undefined,
+    )
+    expect(r?.statusCode).toBe(400)
+    expect(auth.createUser).not.toHaveBeenCalled()
+  })
+
   it('register maps invalid password to 400', async () => {
     process.env.AUTH_ALLOW_REGISTER = 'true'
     platform.isRegistrationOpen.mockResolvedValue(true)
     auth.createUser.mockResolvedValue({ ok: false, error: 'invalid_password' })
     const r = await handleV1Auth(
       baseEvent({
-        body: JSON.stringify({ email: 'n@b.com', password: 'Valid1!@#ab' }),
+        body: JSON.stringify({ email: 'n@b.com', password: 'Valid1!@#ab12' }),
         requestContext: {
           ...baseEvent().requestContext,
           http: { method: 'POST', path: '/v1/auth/register', protocol: 'HTTP/1.1' },
