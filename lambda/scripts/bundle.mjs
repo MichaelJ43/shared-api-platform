@@ -14,6 +14,12 @@ if (!existsSync(resolve(root, 'node_modules'))) {
   process.exit(1)
 }
 
+const xdbV4 = resolve(root, 'data/ip2region/ip2region_v4.xdb')
+if (!existsSync(xdbV4)) {
+  console.error('Missing ip2region xdb. Run: npm run ensure:xdb (in lambda/)')
+  process.exit(1)
+}
+
 // Argon2 is external to the bundle (native .node). It also `require`s hoisted deps
 // at runtime (@phc/format, node-gyp-build) — those must be in the zip too, not only
 // node_modules/argon2 (npm may lift them to the top level).
@@ -28,7 +34,7 @@ function addNodeModulePackage(archive, packagePathFromNodeModules) {
   archive.directory(src, dest, false)
 }
 
-const shipNodeModules = ['argon2', '@phc/format', 'node-gyp-build', 'ip2region']
+const shipNodeModules = ['argon2', '@phc/format', 'node-gyp-build']
 
 mkdirSync(dist, { recursive: true })
 
@@ -41,8 +47,7 @@ await build({
   sourcemap: true,
   minify: false,
   // Native module: ship node_modules/argon2 in the zip (see below)
-  // ip2region loads binary .db files from its package at runtime
-  external: ['argon2', 'ip2region'],
+  external: ['argon2'],
 })
 
 const outZip = resolve(dist, 'http.zip')
@@ -57,6 +62,7 @@ archive.file(resolve(dist, 'package.json'), { name: 'package.json' })
 for (const name of shipNodeModules) {
   addNodeModulePackage(archive, name)
 }
+archive.directory(resolve(root, 'data/ip2region'), 'data/ip2region', false)
 await new Promise((res, rej) => {
   output.on('close', res)
   archive.on('error', rej)

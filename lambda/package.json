@@ -5,12 +5,13 @@
   "type": "commonjs",
   "main": "dist/handler.js",
   "scripts": {
-    "build": "npm run openapi:generate && node scripts/bundle.mjs",
+    "ensure:xdb": "node scripts/ensure-ip2region-xdb.mjs",
+    "build": "npm run openapi:generate && npm run ensure:xdb && node scripts/bundle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build:lambda": "node scripts/bundle.mjs",
+    "build:lambda": "npm run ensure:xdb && node scripts/bundle.mjs",
     "openapi:generate": "tsx src/openapi-generate.ts",
-    "test": "vitest run",
-    "test:cov": "vitest run --coverage",
+    "test": "npm run ensure:xdb && vitest run",
+    "test:cov": "npm run ensure:xdb && vitest run --coverage",
     "lint:oas": "spectral lint --ruleset ../.spectral.yaml ../openapi/openapi.yaml",
     "auth:create-user": "node scripts/create-user.mjs"
   },
@@ -19,7 +20,7 @@
     "@aws-sdk/client-dynamodb": "^3.675.0",
     "@aws-sdk/lib-dynamodb": "^3.675.0",
     "argon2": "^0.44.0",
-    "ip2region": "^2.3.0",
+    "ip2region.js": "^3.1.8",
     "ulid": "^2.3.0",
     "zod": "^3.23.8"
   },
