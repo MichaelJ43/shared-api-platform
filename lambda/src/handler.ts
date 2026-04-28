@@ -147,7 +147,7 @@ async function handleEvent(
     const sourceIp = getClientIp(event)
     const ipHash = hashClientIp(sourceIp, process.env.IP_HASH_SECRET)
     const ipMasked = maskClientIp(sourceIp)
-    const geoLabel = formatLocationLabel(lookupGeo(sourceIp))
+    const geoLabel = formatLocationLabel(await lookupGeo(sourceIp))
     const ua = (event.headers['user-agent'] ?? event.headers['User-Agent'] ?? '').slice(0, 256)
 
     const b = bodyParsed.data

@@ -1,39 +1,85 @@
 /**
- * Offline IP → rough city/region using ip2region (embedded DB; labels may be localized).
+ * Offline IP → rough location using official ip2region **xdb** (via `ip2region.js`).
+ * Locale: China → Chinese labels; other countries → English (upstream dataset policy).
  */
-import IP2Region from 'ip2region'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { IPv4, IPv6, loadContentFromFile, newWithBuffer } from 'ip2region.js'
+import type { Searcher } from 'ip2region.js'
 
 export type GeoParts = { country: string; province: string; city: string; isp: string }
 
-let ip2: InstanceType<typeof IP2Region> | undefined
-
-function getIp2(): InstanceType<typeof IP2Region> | undefined {
-  if (ip2 !== undefined) {
-    return ip2
+function resolveXdbDir(): string {
+  const env = process.env.IP2REGION_XDB_DIR?.trim()
+  if (env) {
+    return env
   }
-  try {
-    ip2 = new IP2Region()
-    return ip2
-  } catch {
-    return undefined
+  // Lambda zip: handler.js next to data/ip2region/
+  const fromHandler = join(__dirname, 'data/ip2region')
+  if (existsSync(join(fromHandler, 'ip2region_v4.xdb'))) {
+    return fromHandler
+  }
+  // Tests / local src: geoFromIp lives in src/
+  return join(__dirname, '..', 'data', 'ip2region')
+}
+
+function parseRegion(region: string): GeoParts | null {
+  const parts = region.split('|')
+  if (parts.length < 4) {
+    return null
+  }
+  const norm = (s: string) => (s && s !== '0' ? s.trim() : '')
+  return {
+    country: norm(parts[0] ?? ''),
+    province: norm(parts[1] ?? ''),
+    city: norm(parts[2] ?? ''),
+    isp: norm(parts[3] ?? ''),
   }
 }
 
-export function lookupGeo(sourceIp: string | undefined): GeoParts | null {
+let searcherV4: Searcher | null | undefined
+let searcherV6: Searcher | null | undefined
+
+function getSearchers(): { v4: Searcher | null; v6: Searcher | null } {
+  if (searcherV4 !== undefined) {
+    return { v4: searcherV4, v6: searcherV6 ?? null }
+  }
+  searcherV4 = null
+  searcherV6 = null
+  const dir = resolveXdbDir()
+  const v4path = join(dir, 'ip2region_v4.xdb')
+  const v6path = join(dir, 'ip2region_v6.xdb')
+  try {
+    if (existsSync(v4path)) {
+      searcherV4 = newWithBuffer(IPv4, loadContentFromFile(v4path))
+    }
+    if (existsSync(v6path)) {
+      searcherV6 = newWithBuffer(IPv6, loadContentFromFile(v6path))
+    }
+  } catch {
+    searcherV4 = null
+    searcherV6 = null
+  }
+  return { v4: searcherV4, v6: searcherV6 }
+}
+
+export async function lookupGeo(sourceIp: string | undefined): Promise<GeoParts | null> {
   if (!sourceIp?.trim()) {
     return null
   }
   const ip = sourceIp.trim()
-  const q = getIp2()
-  if (!q) {
+  const { v4, v6 } = getSearchers()
+  const isV6 = ip.includes(':')
+  const searcher = isV6 ? v6 : v4
+  if (!searcher) {
     return null
   }
   try {
-    const r = q.search(ip) as GeoParts | null
-    if (!r || typeof r !== 'object') {
+    const region = await searcher.search(ip)
+    if (!region || typeof region !== 'string') {
       return null
     }
-    return r
+    return parseRegion(region)
   } catch {
     return null
   }

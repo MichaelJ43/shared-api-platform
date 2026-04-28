@@ -62,12 +62,12 @@ jobs:
           set -e
           cd "$GITHUB_WORKSPACE/lambda"
           npm ci
-          npm run openapi:generate
-          node scripts/bundle.mjs
+          npm run build
           test -f dist/http.zip
           unzip -l dist/http.zip | grep -q 'node_modules/argon2/prebuilds/linux-x64' || { echo "argon2 native prebuilds missing from http.zip"; exit 1; }
           unzip -l dist/http.zip | grep -q 'node_modules/@phc/format' || { echo "@phc/format missing from http.zip"; exit 1; }
           unzip -l dist/http.zip | grep -q 'node_modules/node-gyp-build' || { echo "node-gyp-build missing from http.zip"; exit 1; }
+          unzip -l dist/http.zip | grep -q 'data/ip2region/ip2region_v4.xdb' || { echo "ip2region v4 xdb missing from http.zip"; exit 1; }
 
       - name: Terraform init
         working-directory: deploy/terraform/aws

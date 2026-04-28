@@ -7,6 +7,8 @@ node_modules/
 dist/
 coverage/
 lambda/coverage/
+# Official ip2region binaries (~47MB); fetch with `npm run ensure:xdb` in lambda/
+lambda/data/ip2region/*.xdb
 .terraform/
 *.tfstate
 *.tfstate.*
