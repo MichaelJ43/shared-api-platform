@@ -1,6 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda'
 import { getCorsHeadersWithCredentials, withCors } from './cors'
-import { getClientIp, hashClientIp } from './hashIp'
+import { formatLocationLabel, lookupGeo } from './geoFromIp'
+import { getClientIp, hashClientIp, maskClientIp } from './hashIp'
 import { newIngestId, dayUtcString, putEvent, putEventBatch } from './persist'
 import { ingestRequestBodySchema, versionQuerySchema } from './schemas'
 import { handleV1Auth } from './v1Auth'
@@ -145,6 +146,8 @@ async function handleEvent(
     const day = dayUtcString(now)
     const sourceIp = getClientIp(event)
     const ipHash = hashClientIp(sourceIp, process.env.IP_HASH_SECRET)
+    const ipMasked = maskClientIp(sourceIp)
+    const geoLabel = formatLocationLabel(lookupGeo(sourceIp))
     const ua = (event.headers['user-agent'] ?? event.headers['User-Agent'] ?? '').slice(0, 256)
 
     const b = bodyParsed.data
@@ -157,6 +160,8 @@ async function handleEvent(
         serverTimestampDayUtc: day,
         ingestId,
         ipHash,
+        ipMasked,
+        geoLabel,
         userAgent: ua,
       })
       return json(202, { accepted: 1, ingestId }, corsH)
@@ -173,6 +178,8 @@ async function handleEvent(
       serverTimestampDayUtc: day,
       ingestId: newIngestId(),
       ipHash,
+      ipMasked,
+      geoLabel,
       userAgent: ua,
     }))
     await putEventBatch(table, rows)

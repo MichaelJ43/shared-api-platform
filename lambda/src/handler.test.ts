@@ -100,6 +100,9 @@ describe('handler', () => {
     )
     expect(r.statusCode).toBe(202)
     expect(putEvent).toHaveBeenCalledTimes(1)
+    const row = putEvent.mock.calls[0][1] as { ipMasked: string; geoLabel: string }
+    expect(row.ipMasked).toBe('1.1.1.*')
+    expect(typeof row.geoLabel).toBe('string')
     const j = JSON.parse(r.body ?? '{}')
     expect(j.accepted).toBe(1)
     expect(j.ingestId).toBeDefined()
@@ -149,6 +152,9 @@ describe('handler', () => {
     )
     expect(r.statusCode).toBe(202)
     expect(putEventBatch).toHaveBeenCalledTimes(1)
+    const rows = putEventBatch.mock.calls[0][1] as { ipMasked: string }[]
+    expect(rows[0].ipMasked).toBe('1.1.1.*')
+    expect(rows[1].ipMasked).toBe('1.1.1.*')
   })
 
   it('rejects bad json body', async () => {
