@@ -1,4 +1,5 @@
 import './app.css'
+import { buildAnalyticsColgroupHtml, wireResizableAnalyticsTable } from './analyticsTableResize'
 import { contextCellInnerHtml } from './contextCell'
 
 const API = (import.meta.env.VITE_API_BASE_URL ?? 'https://api.michaelj43.dev').replace(/\/$/, '')
@@ -598,7 +599,8 @@ function renderAnalyticsResults() {
     })
     .join('')
   tbl.innerHTML = `<div class="dashboard__table-wrap">
-    <table class="m43-table">
+    <table class="m43-table dashboard__analytics-table">
+      ${buildAnalyticsColgroupHtml()}
       <thead>
         <tr>
           <th scope="col">Time (UTC)</th>
@@ -614,6 +616,10 @@ function renderAnalyticsResults() {
       <tbody>${rows}</tbody>
     </table>
   </div>`
+  const evTable = tbl.querySelector('.dashboard__analytics-table')
+  if (evTable) {
+    wireResizableAnalyticsTable(evTable as HTMLTableElement)
+  }
   renderAnalyticsLoadMore()
 }
 
