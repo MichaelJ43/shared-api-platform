@@ -74,6 +74,14 @@ function abbrevSession(raw: unknown, max = 10): string {
   return escapeHtml(s.slice(0, max)) + '…'
 }
 
+function formatUtcTime(ms: unknown): string {
+  const n = Number(ms)
+  if (!Number.isFinite(n)) {
+    return ''
+  }
+  return `${new Date(n).toISOString().replace('T', ' ').slice(0, 19)} UTC`
+}
+
 function currentView(): 'analytics' | 'users' {
   const h = window.location.hash.replace(/^#/, '').trim()
   return h === 'users' ? 'users' : 'analytics'
@@ -126,11 +134,22 @@ function renderAnalyticsView(container: HTMLElement) {
       <div class="dashboard__query">
         <div class="m43-field">
           <label for="appId">appId</label>
-          <input class="m43-input" type="text" id="appId" value="dredd-contract" autocomplete="off" />
+          <select class="m43-input dashboard__select" id="appId"></select>
         </div>
         <div class="m43-field">
+          <label for="rangePreset">Time range</label>
+          <select class="m43-input dashboard__select" id="rangePreset">
+            <option value="1h">Past hour</option>
+            <option value="6h">Past 6 hours</option>
+            <option value="24h" selected>Past 24 hours</option>
+            <option value="7d">Past week</option>
+            <option value="30d">Past 30 days</option>
+            <option value="day">Single calendar day (UTC)</option>
+          </select>
+        </div>
+        <div class="m43-field dashboard__day-field" id="day-field-wrap">
           <label for="day">Day (UTC)</label>
-          <input class="m43-input" type="text" id="day" placeholder="2026-04-22" inputmode="numeric" autocomplete="off" />
+          <input class="m43-input" type="date" id="day" />
         </div>
         <div class="dashboard__load">
           <button type="button" class="m43-button m43-button--primary" id="load">Load</button>
@@ -139,12 +158,53 @@ function renderAnalyticsView(container: HTMLElement) {
       <div id="tbl" role="status" aria-live="polite"></div>
     </section>
   `
+  const rangeEl = container.querySelector('#rangePreset') as HTMLSelectElement
+  const dayWrap = container.querySelector('#day-field-wrap') as HTMLElement
+  const syncDayVisibility = () => {
+    const isDay = rangeEl.value === 'day'
+    dayWrap.style.display = isDay ? '' : 'none'
+    dayWrap.setAttribute('aria-hidden', isDay ? 'false' : 'true')
+  }
+  rangeEl.addEventListener('change', syncDayVisibility)
+  syncDayVisibility()
   container.querySelector('#load')?.addEventListener('click', () => void loadRows())
   const today = new Date()
   const y = today.getUTCFullYear()
   const mo = String(today.getUTCMonth() + 1).padStart(2, '0')
   const d = String(today.getUTCDate()).padStart(2, '0')
   ;(container.querySelector('#day') as HTMLInputElement).value = `${y}-${mo}-${d}`
+  void populateAppIdSelect(container.querySelector('#appId') as HTMLSelectElement)
+}
+
+async function populateAppIdSelect(sel: HTMLSelectElement) {
+  sel.innerHTML = '<option value="">Loading apps…</option>'
+  sel.disabled = true
+  try {
+    const r = await fetch(`${API}/v1/admin/analytics/app-ids`, { credentials: 'include' })
+    sel.disabled = false
+    if (!r.ok) {
+      sel.innerHTML =
+        '<option value="dredd-contract">dredd-contract</option><option value="">—</option>'
+      sel.value = 'dredd-contract'
+      return
+    }
+    const j = (await r.json()) as { appIds: string[] }
+    const opts = ['<option value="">Select app…</option>']
+    for (const id of j.appIds) {
+      opts.push(`<option value="${escapeAttr(id)}">${escapeHtml(id)}</option>`)
+    }
+    sel.innerHTML = opts.join('')
+    if (j.appIds.includes('dredd-contract')) {
+      sel.value = 'dredd-contract'
+    } else if (j.appIds.length > 0) {
+      sel.value = j.appIds[0]
+    }
+  } catch {
+    sel.disabled = false
+    sel.innerHTML =
+      '<option value="dredd-contract">dredd-contract</option>'
+    sel.value = 'dredd-contract'
+  }
 }
 
 type UserRow = { email: string; userId: string; createdAt: string; role: 'admin' | 'user' }
@@ -410,22 +470,43 @@ async function patchUserRole(email: string, role: 'admin' | 'user') {
 
 async function loadRows() {
   const root = document.getElementById('view')
-  const appId = (root?.querySelector('#appId') as HTMLInputElement)?.value.trim() ?? ''
-  const day = (root?.querySelector('#day') as HTMLInputElement)?.value.trim() ?? ''
+  const appId = (root?.querySelector('#appId') as HTMLSelectElement)?.value.trim() ?? ''
+  const range = (root?.querySelector('#rangePreset') as HTMLSelectElement)?.value ?? '24h'
+  const dayInput = root?.querySelector('#day') as HTMLInputElement | null
   const tbl = root?.querySelector('#tbl') as HTMLDivElement
   if (!tbl) {
     return
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+  if (!appId) {
     tbl.innerHTML =
-      '<p class="m43-message--error" role="alert">Invalid day. Use YYYY-MM-DD (UTC).</p>'
+      '<p class="m43-message--error" role="alert">Select an appId.</p>'
     return
   }
   tbl.textContent = 'Loading…'
   const u = new URL(`${API}/v1/admin/analytics/events`)
   u.searchParams.set('appId', appId)
-  u.searchParams.set('day', day)
-  u.searchParams.set('limit', '50')
+  u.searchParams.set('limit', '200')
+  if (range === 'day') {
+    const day = dayInput?.value?.trim() ?? ''
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      tbl.innerHTML =
+        '<p class="m43-message--error" role="alert">Pick a valid calendar day (UTC).</p>'
+      return
+    }
+    u.searchParams.set('day', day)
+  } else {
+    const now = Date.now()
+    const spanMs: Record<string, number> = {
+      '1h': 3600000,
+      '6h': 6 * 3600000,
+      '24h': 24 * 3600000,
+      '7d': 7 * 24 * 3600000,
+      '30d': 30 * 24 * 3600000,
+    }
+    const ms = spanMs[range] ?? 24 * 3600000
+    u.searchParams.set('from', new Date(now - ms).toISOString())
+    u.searchParams.set('to', new Date(now).toISOString())
+  }
   const r = await fetch(u.toString(), { credentials: 'include' })
   if (r.status === 401) {
     const href = signInHref()
@@ -448,6 +529,7 @@ async function loadRows() {
       const fullSession = String(it.sessionId ?? '')
       return `
       <tr>
+        <td class="dashboard__cell-muted">${escapeHtml(formatUtcTime(it.serverTimestamp))}</td>
         <td>${escapeHtml(String(it.eventType ?? ''))}</td>
         <td class="dashboard__path-cell">${escapeHtml(String(it.path ?? ''))}</td>
         <td title="${escapeAttr(fullSession)}">${abbrevSession(it.sessionId)}</td>
@@ -461,6 +543,7 @@ async function loadRows() {
     <table class="m43-table">
       <thead>
         <tr>
+          <th scope="col">Time (UTC)</th>
           <th scope="col">eventType</th>
           <th scope="col">path</th>
           <th scope="col">session</th>
