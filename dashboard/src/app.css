@@ -188,16 +188,28 @@ input.m43-input[type='date'] {
   max-width: 100%;
 }
 
-.dashboard__analytics-table {
+/* Analytics table: override .m43-table { width:100% } + word-break so fixed cols are not crushed. */
+.m43-table.dashboard__analytics-table {
   table-layout: fixed;
-  width: auto;
+  width: max-content;
   min-width: 100%;
+}
+
+.dashboard__analytics-table.m43-table th,
+.dashboard__analytics-table.m43-table td {
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .dashboard__analytics-table thead th {
   position: relative;
   vertical-align: bottom;
-  padding-right: 0.65rem;
+  padding-right: 0.85rem;
+  white-space: nowrap;
+}
+
+.dashboard__analytics-table .dashboard__path-cell {
+  word-break: break-all;
 }
 
 .dashboard__col-resize-handle {
