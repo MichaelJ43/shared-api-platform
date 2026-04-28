@@ -13,18 +13,29 @@ const COL_KEYS = [
 
 export type AnalyticsColKey = (typeof COL_KEYS)[number]
 
-const MIN_COL_PX = 48
-const LS_KEY = 'm43-dashboard-analytics-col-widths-v1'
+/** Floor widths so headers like "Time (UTC)" stay readable after resize / storage. */
+const MIN_PX: Record<AnalyticsColKey, number> = {
+  time: 152,
+  eventType: 112,
+  path: 200,
+  session: 96,
+  network: 104,
+  location: 104,
+  context: 240,
+  ingestId: 200,
+}
+
+const LS_KEY = 'm43-dashboard-analytics-col-widths-v2'
 
 const DEFAULT_PX: Record<AnalyticsColKey, number> = {
-  time: 180,
-  eventType: 130,
-  path: 260,
-  session: 104,
+  time: 200,
+  eventType: 140,
+  path: 280,
+  session: 112,
   network: 120,
-  location: 130,
-  context: 380,
-  ingestId: 228,
+  location: 128,
+  context: 420,
+  ingestId: 260,
 }
 
 function readStored(): Partial<Record<AnalyticsColKey, number>> | null {
@@ -37,7 +48,8 @@ function readStored(): Partial<Record<AnalyticsColKey, number>> | null {
     const out: Partial<Record<AnalyticsColKey, number>> = {}
     for (const k of COL_KEYS) {
       const n = Number(o[k])
-      if (Number.isFinite(n) && n >= MIN_COL_PX) {
+      const floor = MIN_PX[k]
+      if (Number.isFinite(n) && n >= floor) {
         out[k] = Math.round(n)
       }
     }
@@ -60,7 +72,7 @@ function currentWidthsFromCols(cols: HTMLTableColElement[]): Record<AnalyticsCol
   for (let i = 0; i < cols.length; i++) {
     const k = COL_KEYS[i]
     const w = Math.round(cols[i].getBoundingClientRect().width)
-    if (Number.isFinite(w) && w >= MIN_COL_PX) {
+    if (Number.isFinite(w) && w >= MIN_PX[k]) {
       out[k] = w
     }
   }
@@ -71,8 +83,9 @@ function currentWidthsFromCols(cols: HTMLTableColElement[]): Record<AnalyticsCol
 export function buildAnalyticsColgroupHtml(): string {
   const stored = readStored()
   const parts = COL_KEYS.map((k) => {
-    const width = stored?.[k] ?? DEFAULT_PX[k]
-    return `<col data-col="${k}" style="width:${width}px" />`
+    const raw = stored?.[k] ?? DEFAULT_PX[k]
+    const width = Math.max(MIN_PX[k], Math.round(raw))
+    return `<col data-col="${k}" style="width:${width}px;min-width:${width}px" />`
   })
   return `<colgroup>${parts.join('')}</colgroup>`
 }
@@ -105,8 +118,9 @@ export function wireResizableAnalyticsTable(table: HTMLTableElement): void {
     th.appendChild(handle)
 
     const applyWidth = (px: number) => {
-      const w = Math.max(MIN_COL_PX, Math.round(px))
+      const w = Math.max(MIN_PX[key], Math.round(px))
       col.style.width = `${w}px`
+      col.style.minWidth = `${w}px`
     }
 
     const persist = () => {
