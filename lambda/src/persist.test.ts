@@ -54,6 +54,8 @@ describe('putEvent & batch', () => {
       serverTimestampDayUtc: '2026-01-01',
       ingestId: 'id1',
       ipHash: 'h',
+      ipMasked: '',
+      geoLabel: '',
       userAgent: 'ua',
     })
     const [cmd] = send.mock.calls[0] as [{ input: { TableName: string; Item: { pk: string; sk: string; ttl?: number } } }]
@@ -75,6 +77,8 @@ describe('putEvent & batch', () => {
       serverTimestampDayUtc: '2026-01-01',
       ingestId: 'id1',
       ipHash: 'h',
+      ipMasked: '',
+      geoLabel: '',
       userAgent: 'ua',
     })
     expect(send).toHaveBeenCalledTimes(1)
@@ -99,6 +103,8 @@ describe('putEvent & batch', () => {
       serverTimestampDayUtc: '2026-01-01',
       ingestId: 'id' + i,
       ipHash: '',
+      ipMasked: '',
+      geoLabel: '',
       userAgent: '',
     }))
     await putEventBatch('tbl', rows)

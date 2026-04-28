@@ -28,7 +28,7 @@ function addNodeModulePackage(archive, packagePathFromNodeModules) {
   archive.directory(src, dest, false)
 }
 
-const shipNodeModules = ['argon2', '@phc/format', 'node-gyp-build']
+const shipNodeModules = ['argon2', '@phc/format', 'node-gyp-build', 'ip2region']
 
 mkdirSync(dist, { recursive: true })
 
@@ -41,7 +41,8 @@ await build({
   sourcemap: true,
   minify: false,
   // Native module: ship node_modules/argon2 in the zip (see below)
-  external: ['argon2'],
+  // ip2region loads binary .db files from its package at runtime
+  external: ['argon2', 'ip2region'],
 })
 
 const outZip = resolve(dist, 'http.zip')

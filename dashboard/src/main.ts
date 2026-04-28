@@ -57,6 +57,23 @@ function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+function cellOrDash(raw: unknown): string {
+  const s = String(raw ?? '').trim()
+  return s ? escapeHtml(s) : '—'
+}
+
+/** Short stable id for the browser session (full value in tooltip). */
+function abbrevSession(raw: unknown, max = 10): string {
+  const s = String(raw ?? '').trim()
+  if (!s) {
+    return '—'
+  }
+  if (s.length <= max) {
+    return escapeHtml(s)
+  }
+  return escapeHtml(s.slice(0, max)) + '…'
+}
+
 function currentView(): 'analytics' | 'users' {
   const h = window.location.hash.replace(/^#/, '').trim()
   return h === 'users' ? 'users' : 'analytics'
@@ -427,14 +444,18 @@ async function loadRows() {
     return
   }
   const rows = j.items
-    .map(
-      (it) => `
+    .map((it) => {
+      const fullSession = String(it.sessionId ?? '')
+      return `
       <tr>
         <td>${escapeHtml(String(it.eventType ?? ''))}</td>
         <td class="dashboard__path-cell">${escapeHtml(String(it.path ?? ''))}</td>
+        <td title="${escapeAttr(fullSession)}">${abbrevSession(it.sessionId)}</td>
+        <td>${cellOrDash(it.ipMasked)}</td>
+        <td>${cellOrDash(it.geoLabel)}</td>
         <td>${escapeHtml(String(it.ingestId ?? ''))}</td>
-      </tr>`,
-    )
+      </tr>`
+    })
     .join('')
   tbl.innerHTML = `<div class="dashboard__table-wrap">
     <table class="m43-table">
@@ -442,6 +463,9 @@ async function loadRows() {
         <tr>
           <th scope="col">eventType</th>
           <th scope="col">path</th>
+          <th scope="col">session</th>
+          <th scope="col">network</th>
+          <th scope="col">location</th>
           <th scope="col">ingestId</th>
         </tr>
       </thead>

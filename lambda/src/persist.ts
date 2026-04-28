@@ -15,13 +15,25 @@ export type EventRow = {
   serverTimestampDayUtc: string
   ingestId: string
   ipHash: string
+  ipMasked: string
+  geoLabel: string
   userAgent: string
 }
 
 function buildItem(
   p: EventRow,
 ): { pk: string; sk: string; [key: string]: unknown } {
-  const { appId, event, serverTimestamp, serverTimestampDayUtc, ingestId, ipHash, userAgent } = p
+  const {
+    appId,
+    event,
+    serverTimestamp,
+    serverTimestampDayUtc,
+    ingestId,
+    ipHash,
+    ipMasked,
+    geoLabel,
+    userAgent,
+  } = p
   const pk = `APP#${appId}#DAY#${serverTimestampDayUtc}`
   const sk = `${serverTimestamp}#${ingestId}`
 
@@ -47,6 +59,12 @@ function buildItem(
   }
   if (ipHash) {
     out.ipHash = ipHash
+  }
+  if (ipMasked) {
+    out.ipMasked = ipMasked
+  }
+  if (geoLabel) {
+    out.geoLabel = geoLabel
   }
   if (userAgent) {
     out.userAgent = userAgent
