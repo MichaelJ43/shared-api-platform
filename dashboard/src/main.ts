@@ -1,4 +1,5 @@
 import './app.css'
+import { contextCellInnerHtml } from './contextCell'
 
 const API = (import.meta.env.VITE_API_BASE_URL ?? 'https://api.michaelj43.dev').replace(/\/$/, '')
 const AUTH = (import.meta.env.VITE_AUTH_ORIGIN ?? 'https://auth.michaelj43.dev').replace(/\/$/, '')
@@ -155,7 +156,26 @@ function renderAnalyticsView(container: HTMLElement) {
           <button type="button" class="m43-button m43-button--primary" id="load">Load</button>
         </div>
       </div>
+      <div id="analytics-filters" class="dashboard__analytics-filters" hidden>
+        <div class="m43-field">
+          <label for="filterEventType">eventType</label>
+          <select class="m43-input dashboard__select" id="filterEventType">
+            <option value="">All event types</option>
+          </select>
+        </div>
+        <div class="m43-field dashboard__filter-context-field">
+          <label for="filterContext">Context contains</label>
+          <input
+            class="m43-input"
+            type="search"
+            id="filterContext"
+            placeholder="Substring in JSON (case-insensitive)"
+            autocomplete="off"
+          />
+        </div>
+      </div>
       <div id="tbl" role="status" aria-live="polite"></div>
+      <div id="analytics-more" class="dashboard__analytics-more"></div>
     </section>
   `
   const rangeEl = container.querySelector('#rangePreset') as HTMLSelectElement
@@ -168,6 +188,12 @@ function renderAnalyticsView(container: HTMLElement) {
   rangeEl.addEventListener('change', syncDayVisibility)
   syncDayVisibility()
   container.querySelector('#load')?.addEventListener('click', () => void loadRows())
+  container.querySelector('#filterEventType')?.addEventListener('change', () => {
+    renderAnalyticsResults()
+  })
+  container.querySelector('#filterContext')?.addEventListener('input', () => {
+    renderAnalyticsResults()
+  })
   const today = new Date()
   const y = today.getUTCFullYear()
   const mo = String(today.getUTCMonth() + 1).padStart(2, '0')
@@ -211,6 +237,10 @@ type UserRow = { email: string; userId: string; createdAt: string; role: 'admin'
 
 let usersListCache: UserRow[] = []
 let usersNextCursor: string | null = null
+
+let analyticsCachedItems: Record<string, unknown>[] = []
+let analyticsEventsNextCursor: string | null = null
+let analyticsLoadMoreKey: { appId: string; day: string } | null = null
 
 function renderUsersView(container: HTMLElement) {
   container.innerHTML = `
@@ -468,15 +498,193 @@ async function patchUserRole(email: string, role: 'admin' | 'user') {
   await loadUsersInitial()
 }
 
+function filterAnalyticsItems(
+  items: Record<string, unknown>[],
+  eventType: string,
+  contextSub: string,
+): Record<string, unknown>[] {
+  let out = items
+  if (eventType) {
+    out = out.filter((it) => String(it.eventType ?? '') === eventType)
+  }
+  const needle = contextSub.trim().toLowerCase()
+  if (needle) {
+    out = out.filter((it) => {
+      let serialized: string
+      try {
+        serialized = JSON.stringify(it.properties ?? {})
+      } catch {
+        serialized = ''
+      }
+      return serialized.toLowerCase().includes(needle)
+    })
+  }
+  return out
+}
+
+function syncAnalyticsFilterOptions(items: Record<string, unknown>[]) {
+  const root = document.getElementById('view')
+  const sel = root?.querySelector('#filterEventType') as HTMLSelectElement | null
+  const filters = document.getElementById('analytics-filters')
+  if (!sel || !filters) {
+    return
+  }
+  const prev = sel.value
+  const types = [
+    ...new Set(items.map((it) => String(it.eventType ?? '').trim()).filter(Boolean)),
+  ].sort((a, b) => a.localeCompare(b))
+  const opts = ['<option value="">All event types</option>']
+  for (const t of types) {
+    opts.push(`<option value="${escapeAttr(t)}">${escapeHtml(t)}</option>`)
+  }
+  sel.innerHTML = opts.join('')
+  if (types.includes(prev)) {
+    sel.value = prev
+  }
+}
+
+function setAnalyticsFiltersVisible(show: boolean) {
+  document.getElementById('analytics-filters')?.toggleAttribute('hidden', !show)
+}
+
+function renderAnalyticsLoadMore() {
+  const more = document.getElementById('analytics-more')
+  if (!more) {
+    return
+  }
+  more.innerHTML = ''
+  if (analyticsEventsNextCursor && analyticsLoadMoreKey) {
+    more.innerHTML =
+      '<p class="m43-intro dashboard__hint">More events exist for this day — load the next page.</p><button type="button" class="m43-button" id="analytics-load-more">Load more</button>'
+    document.getElementById('analytics-load-more')?.addEventListener('click', () => void loadMoreAnalytics())
+  }
+}
+
+function renderAnalyticsResults() {
+  const root = document.getElementById('view')
+  const tbl = root?.querySelector('#tbl') as HTMLDivElement | null
+  if (!tbl) {
+    return
+  }
+  const eventFilter = (root?.querySelector('#filterEventType') as HTMLSelectElement)?.value ?? ''
+  const contextNeedle = (root?.querySelector('#filterContext') as HTMLInputElement)?.value ?? ''
+
+  if (analyticsCachedItems.length === 0) {
+    return
+  }
+
+  const filtered = filterAnalyticsItems(analyticsCachedItems, eventFilter, contextNeedle)
+
+  if (!filtered.length) {
+    tbl.innerHTML = '<p class="m43-intro">No rows match the current filters.</p>'
+    renderAnalyticsLoadMore()
+    return
+  }
+
+  const rows = filtered
+    .map((it) => {
+      const fullSession = String(it.sessionId ?? '')
+      return `
+      <tr>
+        <td class="dashboard__cell-muted">${escapeHtml(formatUtcTime(it.serverTimestamp))}</td>
+        <td>${escapeHtml(String(it.eventType ?? ''))}</td>
+        <td class="dashboard__path-cell">${escapeHtml(String(it.path ?? ''))}</td>
+        <td title="${escapeAttr(fullSession)}">${abbrevSession(it.sessionId)}</td>
+        <td>${cellOrDash(it.ipMasked)}</td>
+        <td>${cellOrDash(it.geoLabel)}</td>
+        <td class="dashboard__context-cell">${contextCellInnerHtml(it.properties)}</td>
+        <td>${escapeHtml(String(it.ingestId ?? ''))}</td>
+      </tr>`
+    })
+    .join('')
+  tbl.innerHTML = `<div class="dashboard__table-wrap">
+    <table class="m43-table">
+      <thead>
+        <tr>
+          <th scope="col">Time (UTC)</th>
+          <th scope="col">eventType</th>
+          <th scope="col">path</th>
+          <th scope="col">session</th>
+          <th scope="col">network</th>
+          <th scope="col">location</th>
+          <th scope="col" title="Optional dimensions from the client; stored as properties in the API.">Context</th>
+          <th scope="col">ingestId</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`
+  renderAnalyticsLoadMore()
+}
+
+async function loadMoreAnalytics() {
+  if (!analyticsEventsNextCursor || !analyticsLoadMoreKey) {
+    return
+  }
+  const more = document.getElementById('analytics-more')
+  ;(more?.querySelector('#analytics-load-more') as HTMLButtonElement | null)?.setAttribute('disabled', 'true')
+  const u = new URL(`${API}/v1/admin/analytics/events`)
+  u.searchParams.set('appId', analyticsLoadMoreKey.appId)
+  u.searchParams.set('day', analyticsLoadMoreKey.day)
+  u.searchParams.set('limit', '200')
+  u.searchParams.set('cursor', analyticsEventsNextCursor)
+  const r = await fetch(u.toString(), { credentials: 'include' })
+  const tbl = document.getElementById('view')?.querySelector('#tbl') as HTMLDivElement | null
+  if (r.status === 401) {
+    if (tbl) {
+      const href = signInHref()
+      tbl.innerHTML = `<p class="m43-message--error" role="alert">Not signed in or session expired.</p>
+        <p><a class="m43-button m43-button--primary" href="${escapeAttr(href)}">Sign in</a></p>`
+    }
+    if (more) {
+      more.innerHTML = ''
+    }
+    return
+  }
+  if (!r.ok) {
+    if (more) {
+      more.innerHTML = `<p class="m43-message--error" role="alert">Could not load more (${r.status}).</p>${
+        analyticsEventsNextCursor && analyticsLoadMoreKey
+          ? '<button type="button" class="m43-button" id="analytics-load-more-retry">Retry</button>'
+          : ''
+      }`
+      document.getElementById('analytics-load-more-retry')?.addEventListener('click', () => void loadMoreAnalytics())
+    }
+    return
+  }
+  const j = (await r.json()) as { items: Record<string, unknown>[]; nextCursor: string | null }
+  analyticsCachedItems.push(...j.items)
+  analyticsEventsNextCursor = j.nextCursor
+  syncAnalyticsFilterOptions(analyticsCachedItems)
+  renderAnalyticsResults()
+}
+
 async function loadRows() {
   const root = document.getElementById('view')
   const appId = (root?.querySelector('#appId') as HTMLSelectElement)?.value.trim() ?? ''
   const range = (root?.querySelector('#rangePreset') as HTMLSelectElement)?.value ?? '24h'
   const dayInput = root?.querySelector('#day') as HTMLInputElement | null
   const tbl = root?.querySelector('#tbl') as HTMLDivElement
+  const more = document.getElementById('analytics-more')
   if (!tbl) {
     return
   }
+  analyticsCachedItems = []
+  analyticsEventsNextCursor = null
+  analyticsLoadMoreKey = null
+  setAnalyticsFiltersVisible(false)
+  if (more) {
+    more.innerHTML = ''
+  }
+  const filterCtx = root?.querySelector('#filterContext') as HTMLInputElement | null
+  const filterType = root?.querySelector('#filterEventType') as HTMLSelectElement | null
+  if (filterCtx) {
+    filterCtx.value = ''
+  }
+  if (filterType) {
+    filterType.innerHTML = '<option value="">All event types</option>'
+  }
+
   if (!appId) {
     tbl.innerHTML =
       '<p class="m43-message--error" role="alert">Select an appId.</p>'
@@ -486,14 +694,15 @@ async function loadRows() {
   const u = new URL(`${API}/v1/admin/analytics/events`)
   u.searchParams.set('appId', appId)
   u.searchParams.set('limit', '200')
+  let dayStr = ''
   if (range === 'day') {
-    const day = dayInput?.value?.trim() ?? ''
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    dayStr = dayInput?.value?.trim() ?? ''
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dayStr)) {
       tbl.innerHTML =
         '<p class="m43-message--error" role="alert">Pick a valid calendar day (UTC).</p>'
       return
     }
-    u.searchParams.set('day', day)
+    u.searchParams.set('day', dayStr)
   } else {
     const now = Date.now()
     const spanMs: Record<string, number> = {
@@ -520,45 +729,21 @@ async function loadRows() {
     return
   }
   const j = (await r.json()) as { items: Record<string, unknown>[]; nextCursor: string | null }
+  analyticsCachedItems = j.items
+  analyticsEventsNextCursor = j.nextCursor
+  analyticsLoadMoreKey = range === 'day' ? { appId, day: dayStr } : null
+
   if (!j.items.length) {
     tbl.innerHTML = '<p class="m43-intro">No items for that key.</p>'
+    setAnalyticsFiltersVisible(false)
+    if (range === 'day' && j.nextCursor) {
+      renderAnalyticsLoadMore()
+    }
     return
   }
-  const rows = j.items
-    .map((it) => {
-      const fullSession = String(it.sessionId ?? '')
-      return `
-      <tr>
-        <td class="dashboard__cell-muted">${escapeHtml(formatUtcTime(it.serverTimestamp))}</td>
-        <td>${escapeHtml(String(it.eventType ?? ''))}</td>
-        <td class="dashboard__path-cell">${escapeHtml(String(it.path ?? ''))}</td>
-        <td title="${escapeAttr(fullSession)}">${abbrevSession(it.sessionId)}</td>
-        <td>${cellOrDash(it.ipMasked)}</td>
-        <td>${cellOrDash(it.geoLabel)}</td>
-        <td>${escapeHtml(String(it.ingestId ?? ''))}</td>
-      </tr>`
-    })
-    .join('')
-  tbl.innerHTML = `<div class="dashboard__table-wrap">
-    <table class="m43-table">
-      <thead>
-        <tr>
-          <th scope="col">Time (UTC)</th>
-          <th scope="col">eventType</th>
-          <th scope="col">path</th>
-          <th scope="col">session</th>
-          <th scope="col">network</th>
-          <th scope="col">location</th>
-          <th scope="col">ingestId</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </div>${
-    j.nextCursor
-      ? '<p class="m43-intro dashboard__hint">More data available; pagination can be added.</p>'
-      : ''
-  }`
+  setAnalyticsFiltersVisible(true)
+  syncAnalyticsFilterOptions(analyticsCachedItems)
+  renderAnalyticsResults()
 }
 
 ;(async () => {
