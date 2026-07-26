@@ -24,9 +24,10 @@ env:
   TF_STATE_KEY: shared-api-platform/previews/pr-${{ github.event.pull_request.number }}/terraform.tfstate
   TF_IN_AUTOMATION: "true"
   BASE_HOST: ${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
-  API_HOST: api-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
-  AUTH_HOST: auth-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
-  DASH_HOST: analytics-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
+  # Nested under prod hosts so ACM wildcards like *.api.michaelj43.dev cover previews.
+  API_HOST: pr-${{ github.event.pull_request.number }}.${{ vars.TF_CUSTOM_DOMAIN || 'api.michaelj43.dev' }}
+  AUTH_HOST: pr-${{ github.event.pull_request.number }}.${{ vars.AUTH_SPA_DOMAIN || 'auth.michaelj43.dev' }}
+  DASH_HOST: pr-${{ github.event.pull_request.number }}.${{ vars.DASHBOARD_SPA_DOMAIN || 'analytics.michaelj43.dev' }}
 
 jobs:
   deploy:
@@ -35,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: preview-pr-${{ github.event.pull_request.number }}
-      url: https://api-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
+      url: https://pr-${{ github.event.pull_request.number }}.${{ vars.TF_CUSTOM_DOMAIN || 'api.michaelj43.dev' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -235,9 +236,9 @@ jobs:
     if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     env:
-      PREVIEW_API_URL: https://api-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
-      PREVIEW_AUTH_URL: https://auth-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
-      PREVIEW_DASH_URL: https://analytics-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
+      PREVIEW_API_URL: https://pr-${{ github.event.pull_request.number }}.${{ vars.TF_CUSTOM_DOMAIN || 'api.michaelj43.dev' }}
+      PREVIEW_AUTH_URL: https://pr-${{ github.event.pull_request.number }}.${{ vars.AUTH_SPA_DOMAIN || 'auth.michaelj43.dev' }}
+      PREVIEW_DASH_URL: https://pr-${{ github.event.pull_request.number }}.${{ vars.DASHBOARD_SPA_DOMAIN || 'analytics.michaelj43.dev' }}
       DREDD_ORIGIN: https://${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
     steps:
       - uses: actions/checkout@v4

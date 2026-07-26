@@ -19,11 +19,11 @@ Each non-Dependabot PR gets an isolated Terraform workspace (state key `shared-a
 
 | Resource | Hostname pattern |
 |----------|------------------|
-| HTTP API | `https://api-pr-<n>.<CORS_ALLOWED_BASE_HOST>` |
-| Auth SPA | `https://auth-pr-<n>.<CORS_ALLOWED_BASE_HOST>` |
-| Dashboard | `https://analytics-pr-<n>.<CORS_ALLOWED_BASE_HOST>` |
+| HTTP API | `https://pr-<n>.<TF_CUSTOM_DOMAIN>` e.g. `pr-12.api.michaelj43.dev` |
+| Auth SPA | `https://pr-<n>.<AUTH_SPA_DOMAIN>` e.g. `pr-12.auth.michaelj43.dev` |
+| Dashboard | `https://pr-<n>.<DASHBOARD_SPA_DOMAIN>` e.g. `pr-12.analytics.michaelj43.dev` |
 
-Requires the same OIDC role, state backend, ACM wildcard (`*.<base>`), and Route 53 zone secrets as production. SPA S3 buckets use `spa_bucket_force_destroy=true` so teardown can delete non-empty buckets.
+Requires the same OIDC role, state backend, and Route 53 zone secrets as production. ACM certificates must cover the preview names (typically wildcards `*.api.…`, `*.auth.…`, `*.analytics.…` on the same certs used for prod, or SANs that include those patterns). SPA S3 buckets use `spa_bucket_force_destroy=true` so teardown can delete non-empty buckets.
 
 **Validate preview** waits for `/health` and SPA HTTP 200, then runs Dredd. **Preview gate** is the branch-protection check (passes for Dependabot without deploying).
 
