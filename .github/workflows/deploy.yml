@@ -28,7 +28,7 @@ jobs:
       TF_IN_AUTOMATION: "true"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: App version
         id: v
@@ -39,12 +39,12 @@ jobs:
           echo "version=$ver"
 
       - name: Configure AWS (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -53,7 +53,7 @@ jobs:
             dashboard/package-lock.json
             auth-spa/package-lock.json
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.9.0
 

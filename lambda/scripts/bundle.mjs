@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, createWriteStream, existsSync }
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
-import archiver from 'archiver'
+import { ZipArchive } from 'archiver'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, '..')
@@ -52,7 +52,7 @@ await build({
 
 const outZip = resolve(dist, 'http.zip')
 const output = createWriteStream(outZip)
-const archive = archiver('zip', { zlib: { level: 9 } })
+const archive = new ZipArchive({ zlib: { level: 9 } })
 archive.pipe(output)
 archive.file(outJs, { name: 'handler.js' })
 const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
