@@ -23,14 +23,14 @@ env:
   TF_STATE_LOCK_TABLE: ${{ secrets.TF_STATE_LOCK_TABLE }}
   TF_STATE_KEY: shared-api-platform/previews/pr-${{ github.event.pull_request.number }}/terraform.tfstate
   TF_IN_AUTOMATION: "true"
-  # Product base domain — same model as card-game's cardgame.michaelj43.dev
-  # (one Route53 zone + ACM wildcard *.platform.… covers all preview hosts).
-  PLATFORM_DOMAIN: ${{ vars.TF_PLATFORM_DOMAIN || 'platform.michaelj43.dev' }}
+  # Product base — same model as card-game's cardgame.michaelj43.dev.
+  # Cert must cover api.michaelj43.dev + *.api.michaelj43.dev.
+  PLATFORM_DOMAIN: ${{ vars.TF_PLATFORM_DOMAIN || 'api.michaelj43.dev' }}
   BASE_HOST: ${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
-  # Card-game style: pr-<n> = primary SPA, api-pr-<n> / auth-pr-<n> siblings.
-  DASH_HOST: pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'platform.michaelj43.dev' }}
-  API_HOST: api-pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'platform.michaelj43.dev' }}
-  AUTH_HOST: auth-pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'platform.michaelj43.dev' }}
+  # Card-game style: pr-<n> = primary SPA, api-pr-<n> / auth-pr-<n> siblings under the base.
+  DASH_HOST: pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'api.michaelj43.dev' }}
+  API_HOST: api-pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'api.michaelj43.dev' }}
+  AUTH_HOST: auth-pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'api.michaelj43.dev' }}
 
 jobs:
   deploy:
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: preview-pr-${{ github.event.pull_request.number }}
-      url: https://pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'platform.michaelj43.dev' }}
+      url: https://pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'api.michaelj43.dev' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -96,13 +96,13 @@ jobs:
         working-directory: deploy/terraform/aws
         env:
           IP_HASH: ${{ secrets.IP_HASH_SECRET }}
-          # Platform zone + wildcard cert only (do not reuse prod api./auth. certs).
-          PLATFORM_ACM: ${{ secrets.TF_PLATFORM_ACM_CERTIFICATE_ARN }}
-          PLATFORM_ZONE: ${{ secrets.TF_PLATFORM_ROUTE53_HOSTED_ZONE_ID }}
+          # api.michaelj43.dev + *.api.michaelj43.dev cert/zone (card-game style).
+          PLATFORM_ACM: ${{ secrets.TF_PLATFORM_ACM_CERTIFICATE_ARN || secrets.TF_ACM_CERTIFICATE_ARN }}
+          PLATFORM_ZONE: ${{ secrets.TF_PLATFORM_ROUTE53_HOSTED_ZONE_ID || secrets.TF_ROUTE53_HOSTED_ZONE_ID }}
         run: |
           set -euo pipefail
           if [ -z "${PLATFORM_ACM:-}" ] || [ -z "${PLATFORM_ZONE:-}" ]; then
-            echo "::error::Set secrets TF_PLATFORM_ACM_CERTIFICATE_ARN and TF_PLATFORM_ROUTE53_HOSTED_ZONE_ID for ${PLATFORM_DOMAIN} (ACM must cover ${PLATFORM_DOMAIN} and *.${PLATFORM_DOMAIN}, same pattern as card-game's *.cardgame.michaelj43.dev)."
+            echo "::error::Set TF_ACM_CERTIFICATE_ARN + TF_ROUTE53_HOSTED_ZONE_ID (cert must cover ${PLATFORM_DOMAIN} and *.${PLATFORM_DOMAIN})."
             exit 1
           fi
           set -a
@@ -235,10 +235,10 @@ jobs:
     if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     env:
-      PREVIEW_API_URL: https://api-pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'platform.michaelj43.dev' }}
-      PREVIEW_AUTH_URL: https://auth-pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'platform.michaelj43.dev' }}
-      PREVIEW_DASH_URL: https://pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'platform.michaelj43.dev' }}
-      DREDD_ORIGIN: https://pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'platform.michaelj43.dev' }}
+      PREVIEW_API_URL: https://api-pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'api.michaelj43.dev' }}
+      PREVIEW_AUTH_URL: https://auth-pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'api.michaelj43.dev' }}
+      PREVIEW_DASH_URL: https://pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'api.michaelj43.dev' }}
+      DREDD_ORIGIN: https://pr-${{ github.event.pull_request.number }}.${{ vars.TF_PLATFORM_DOMAIN || 'api.michaelj43.dev' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -377,8 +377,8 @@ jobs:
         working-directory: deploy/terraform/aws
         env:
           IP_HASH: ${{ secrets.IP_HASH_SECRET }}
-          PLATFORM_ACM: ${{ secrets.TF_PLATFORM_ACM_CERTIFICATE_ARN }}
-          PLATFORM_ZONE: ${{ secrets.TF_PLATFORM_ROUTE53_HOSTED_ZONE_ID }}
+          PLATFORM_ACM: ${{ secrets.TF_PLATFORM_ACM_CERTIFICATE_ARN || secrets.TF_ACM_CERTIFICATE_ARN }}
+          PLATFORM_ZONE: ${{ secrets.TF_PLATFORM_ROUTE53_HOSTED_ZONE_ID || secrets.TF_ROUTE53_HOSTED_ZONE_ID }}
         run: |
           set -euo pipefail
           if [ -z "${PLATFORM_ACM:-}" ] || [ -z "${PLATFORM_ZONE:-}" ]; then

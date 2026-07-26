@@ -19,19 +19,18 @@ Modeled on **card-game** (`cardgame.michaelj43.dev`): one product base domain, o
 
 | | card-game | shared-api-platform |
 |--|-----------|---------------------|
-| Base | `cardgame.michaelj43.dev` | `platform.michaelj43.dev` (`TF_PLATFORM_DOMAIN`) |
-| Primary / site | `pr-<n>.cardgame.…` | `pr-<n>.platform.…` (dashboard) |
-| API | `api-pr-<n>.cardgame.…` | `api-pr-<n>.platform.…` |
-| Extra | `ws-pr-<n>`, `turn-pr-<n>` | `auth-pr-<n>.platform.…` |
+| Base | `cardgame.michaelj43.dev` | `api.michaelj43.dev` (`TF_PLATFORM_DOMAIN`) |
+| Primary / site | `pr-<n>.cardgame.…` | `pr-<n>.api.…` (dashboard) |
+| API | `api-pr-<n>.cardgame.…` | `api-pr-<n>.api.…` |
+| Extra | `ws-pr-<n>`, `turn-pr-<n>` | `auth-pr-<n>.api.…` |
 
 Each non-Dependabot PR gets an isolated Terraform workspace (state key `shared-api-platform/previews/pr-<n>/terraform.tfstate`).
 
-### One-time DNS / TLS (same idea as card-game)
+### DNS / TLS
 
-1. Create a public Route 53 hosted zone for **`platform.michaelj43.dev`** (NS delegation from `michaelj43.dev`).
-2. Request an ACM certificate in **us-east-1** for `platform.michaelj43.dev` + `*.platform.michaelj43.dev` (covers API Gateway and CloudFront).
-3. Set repository secrets **`TF_PLATFORM_ACM_CERTIFICATE_ARN`** and **`TF_PLATFORM_ROUTE53_HOSTED_ZONE_ID`** (do not reuse the prod `api.` / SPA certs — those do not cover `*.platform.…`).
-4. Optional variable **`TF_PLATFORM_DOMAIN`** (default `platform.michaelj43.dev`).
+ACM must cover **`api.michaelj43.dev`** and **`*.api.michaelj43.dev`** (us-east-1 for CloudFront + API Gateway when the stack is in us-east-1). Route 53 hosted zone must be authoritative for `api.michaelj43.dev` (so `pr-12`, `api-pr-12`, `auth-pr-12` records land under it).
+
+Secrets: **`TF_ACM_CERTIFICATE_ARN`** + **`TF_ROUTE53_HOSTED_ZONE_ID`** (same ones used for the prod API custom domain). Optional overrides: `TF_PLATFORM_ACM_CERTIFICATE_ARN` / `TF_PLATFORM_ROUTE53_HOSTED_ZONE_ID`. Variable **`TF_PLATFORM_DOMAIN`** defaults to `api.michaelj43.dev`.
 
 SPA S3 buckets use `spa_bucket_force_destroy=true` so teardown can delete non-empty buckets.
 
