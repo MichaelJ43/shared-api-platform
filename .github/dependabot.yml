@@ -1,0 +1,76 @@
+# Dependabot version updates and security advisories for npm packages.
+# See docs/security-automation.md for how PRs are triaged and merged.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /lambda
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - security
+    commit-message:
+      prefix: deps(lambda)
+
+  - package-ecosystem: npm
+    directory: /client
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+    commit-message:
+      prefix: deps(client)
+
+  - package-ecosystem: npm
+    directory: /auth-spa
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+    commit-message:
+      prefix: deps(auth-spa)
+
+  - package-ecosystem: npm
+    directory: /dashboard
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+    commit-message:
+      prefix: deps(dashboard)
+
+  - package-ecosystem: npm
+    directory: /contract
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+    commit-message:
+      prefix: deps(contract)
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+    commit-message:
+      prefix: deps(actions)

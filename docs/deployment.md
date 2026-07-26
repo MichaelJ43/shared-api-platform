@@ -1,6 +1,35 @@
 # Deployment
 
-Pipelines: `.github/workflows/ci.yml` (pull requests and `main`) and `.github/workflows/deploy.yml` (only `main` pushes, skips commits with `[skip deploy]` in the message). CI optionally runs **Dredd** when the repository **variable** `DREDD_BASE_URL` is set (e.g. `https://api.michaelj43.dev`); set optional `DREDD_ORIGIN` to match an allow-listed CORS origin (defaults to `https://michaelj43.dev` for hooks).
+Pipelines:
+
+| Workflow | When |
+|----------|------|
+| `.github/workflows/ci.yml` | Pull requests and `main` |
+| `.github/workflows/preview.yml` | PR open/sync → ephemeral stack; PR close → destroy; **Validate preview** (health + SPAs + Dredd) |
+| `.github/workflows/deploy.yml` | `main` pushes and manual dispatch |
+| `.github/workflows/cleanup-preview-environments.yml` | Manual cleanup of stale GitHub `preview-pr-*` environments |
+
+CI optionally runs **Dredd** against production when the repository **variable** `DREDD_BASE_URL` is set (e.g. `https://api.michaelj43.dev`); set optional `DREDD_ORIGIN` to match an allow-listed CORS origin (defaults to `https://michaelj43.dev` for hooks). PR previews always run Dredd against the ephemeral API.
+
+**Runtime version:** Deploy sets Lambda `APP_VERSION` from the short git SHA (previews use `pr-<n>-<sha>`). `lambda/package.json` stays at `0.0.0` and is not bumped in git.
+
+## Preview environments
+
+Each non-Dependabot PR gets an isolated Terraform workspace (state key `shared-api-platform/previews/pr-<n>/terraform.tfstate`) with hostnames under the same wildcards as production:
+
+| Resource | Variable | Preview hostname |
+|----------|----------|------------------|
+| HTTP API | `TF_CUSTOM_DOMAIN` | `pr-<n>.api.michaelj43.dev` |
+| Auth SPA | `AUTH_SPA_DOMAIN` | `pr-<n>.auth.michaelj43.dev` |
+| Dashboard | `DASHBOARD_SPA_DOMAIN` | `pr-<n>.analytics.michaelj43.dev` |
+
+Uses the existing ACM + Route 53 secrets per surface (`TF_ACM_CERTIFICATE_ARN` / `TF_ROUTE53_HOSTED_ZONE_ID`, and the auth/dashboard SPA cert + zone secrets). Each cert must cover its apex and `*.<apex>` (e.g. `api.michaelj43.dev` + `*.api.michaelj43.dev`).
+
+SPA S3 buckets use `spa_bucket_force_destroy=true` so teardown can delete non-empty buckets.
+
+**Validate preview** waits for `/health` and SPA HTTP 200, then runs Dredd. **Preview gate** is the branch-protection check (passes for Dependabot without deploying).
+
+Closing or merging the PR runs **Teardown preview** (`terraform destroy` + state object delete).
 
 **WAF and HTTP API:** AWS WAF can be associated (via Terraform or console) with **REST** API stages (`/restapis/...` ARNs) only, not with **HTTP** API (API Gateway v2) stage ARNs. This stack uses an HTTP API, so the Terraform module does not attach a web ACL. Use the stage’s **throttling** (rate/burst) and, if you need WAF, terminate TLS on **CloudFront** in front of the API, or use a **REST** API. Do not re-add a `aws_wafv2_web_acl_association` to the v2 stage; apply will fail with an invalid `RESOURCE_ARN`.
 
@@ -18,12 +47,6 @@ Configure **Actions** secrets and variables (see the plan / operators doc). The 
 - **Apply IAM:** the GitHub **OIDC** role for Terraform must be allowed to manage CloudFront, S3 bucket policies, and (for Route 53) `route53:ChangeResourceRecordSets` in the target zones. After the first apply, **sync** built assets: `aws s3 sync` of `auth-spa/dist` and `dashboard/dist` to the printed buckets (see [Auth + dashboard](auth-and-dashboard.md)).
 
 Set the `production` **environment** in the repo to match your process (e.g. protection rules). The workflow uses `environment: production` with a fixed **deployment URL** of `https://api.michaelj43.dev` (adjust the workflow or environment if your API URL differs).
-
-## Pushes from workflows
-
-The deploy job bumps `lambda/package.json` after a successful apply and commits with `[skip deploy]` so only the first commit on `main` runs Terraform; the version bump re-runs **CI** but not **Deploy**.
-
-**Workflows must be allowed to push** to the default branch: **Settings → Actions → General → Workflow permissions → Read and write** (or use a PAT in a custom secret for `actions/checkout` + push).
 
 ## First-time Terraform
 

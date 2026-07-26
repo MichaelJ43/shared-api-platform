@@ -1,11 +1,13 @@
 locals {
   name = "${var.project}-${var.environment}"
 
-  # Apex (michaelj43.dev) or full API host (api.michaelj43.dev) — do not set both styles at once; we never double-prefix api.
+  # Apex (michaelj43.dev) → api.<apex>. Full host (≥3 labels: api.x.y or api-pr-1.x.y) used as-is.
   custom_domain_host = var.custom_domain != null ? lower(trimspace(var.custom_domain)) : ""
   api_domain_name = (
     local.custom_domain_host == "" ? "" : (
-      startswith(local.custom_domain_host, "api.") ? local.custom_domain_host : "api.${local.custom_domain_host}"
+      length(split(".", local.custom_domain_host)) > 2
+      ? local.custom_domain_host
+      : "api.${local.custom_domain_host}"
     )
   )
   use_custom_domain = local.custom_domain_host != "" && var.acm_certificate_arn != null && trimspace(var.acm_certificate_arn) != ""
