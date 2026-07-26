@@ -16,7 +16,7 @@
     "auth:create-user": "node scripts/create-user.mjs"
   },
   "dependencies": {
-    "@asteasolutions/zod-to-openapi": "^7.1.0",
+    "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-dynamodb": "^3.675.0",
     "@aws-sdk/lib-dynamodb": "^3.675.0",
     "argon2": "^0.44.0",
