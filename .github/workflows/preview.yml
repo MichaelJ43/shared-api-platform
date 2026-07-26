@@ -63,7 +63,7 @@ jobs:
             dashboard/package-lock.json
             auth-spa/package-lock.json
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.9.0
 
@@ -352,7 +352,7 @@ jobs:
           cache: npm
           cache-dependency-path: lambda/package-lock.json
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.9.0
 
