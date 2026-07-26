@@ -38,7 +38,7 @@ jobs:
       name: preview-pr-${{ github.event.pull_request.number }}
       url: https://pr-${{ github.event.pull_request.number }}.${{ vars.TF_CUSTOM_DOMAIN || 'api.michaelj43.dev' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
@@ -241,7 +241,7 @@ jobs:
       PREVIEW_DASH_URL: https://pr-${{ github.event.pull_request.number }}.${{ vars.DASHBOARD_SPA_DOMAIN || 'analytics.michaelj43.dev' }}
       DREDD_ORIGIN: https://pr-${{ github.event.pull_request.number }}.${{ vars.DASHBOARD_SPA_DOMAIN || 'analytics.michaelj43.dev' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -336,7 +336,7 @@ jobs:
     if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
