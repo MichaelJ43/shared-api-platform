@@ -46,6 +46,8 @@ components:
           type: string
       required:
         - error
+      additionalProperties:
+        nullable: true
   parameters: {}
 paths:
   /health:
