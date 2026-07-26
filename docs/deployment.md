@@ -15,15 +15,25 @@ CI optionally runs **Dredd** against production when the repository **variable**
 
 ## Preview environments
 
-Each non-Dependabot PR gets an isolated Terraform workspace (state key `shared-api-platform/previews/pr-<n>/terraform.tfstate`) with:
+Modeled on **card-game** (`cardgame.michaelj43.dev`): one product base domain, one ACM wildcard, one Route 53 zone.
 
-| Resource | Hostname pattern |
-|----------|------------------|
-| HTTP API | `https://pr-<n>.<TF_CUSTOM_DOMAIN>` e.g. `pr-12.api.michaelj43.dev` |
-| Auth SPA | `https://pr-<n>.<AUTH_SPA_DOMAIN>` e.g. `pr-12.auth.michaelj43.dev` |
-| Dashboard | `https://pr-<n>.<DASHBOARD_SPA_DOMAIN>` e.g. `pr-12.analytics.michaelj43.dev` |
+| | card-game | shared-api-platform |
+|--|-----------|---------------------|
+| Base | `cardgame.michaelj43.dev` | `platform.michaelj43.dev` (`TF_PLATFORM_DOMAIN`) |
+| Primary / site | `pr-<n>.cardgame.…` | `pr-<n>.platform.…` (dashboard) |
+| API | `api-pr-<n>.cardgame.…` | `api-pr-<n>.platform.…` |
+| Extra | `ws-pr-<n>`, `turn-pr-<n>` | `auth-pr-<n>.platform.…` |
 
-Requires the same OIDC role, state backend, and Route 53 zone secrets as production. ACM certificates must cover the preview names (typically wildcards `*.api.…`, `*.auth.…`, `*.analytics.…` on the same certs used for prod, or SANs that include those patterns). SPA S3 buckets use `spa_bucket_force_destroy=true` so teardown can delete non-empty buckets.
+Each non-Dependabot PR gets an isolated Terraform workspace (state key `shared-api-platform/previews/pr-<n>/terraform.tfstate`).
+
+### One-time DNS / TLS (same idea as card-game)
+
+1. Create a public Route 53 hosted zone for **`platform.michaelj43.dev`** (NS delegation from `michaelj43.dev`).
+2. Request an ACM certificate in **us-east-1** for `platform.michaelj43.dev` + `*.platform.michaelj43.dev` (covers API Gateway and CloudFront).
+3. Set repository secrets **`TF_PLATFORM_ACM_CERTIFICATE_ARN`** and **`TF_PLATFORM_ROUTE53_HOSTED_ZONE_ID`** (do not reuse the prod `api.` / SPA certs — those do not cover `*.platform.…`).
+4. Optional variable **`TF_PLATFORM_DOMAIN`** (default `platform.michaelj43.dev`).
+
+SPA S3 buckets use `spa_bucket_force_destroy=true` so teardown can delete non-empty buckets.
 
 **Validate preview** waits for `/health` and SPA HTTP 200, then runs Dredd. **Preview gate** is the branch-protection check (passes for Dependabot without deploying).
 
