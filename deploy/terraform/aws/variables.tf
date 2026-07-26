@@ -15,9 +15,15 @@ variable "aws_region" {
 }
 
 variable "custom_domain" {
-  description = "Apex (e.g. michaelj43.dev) or full API host (e.g. api.michaelj43.dev). Terraform sets the HTTP API custom domain to api.<apex> or reuses the host as-is; duplicate api. is not added."
+  description = "Apex (e.g. michaelj43.dev) or full API host (e.g. api.michaelj43.dev / api-pr-12.michaelj43.dev). Apex gets api. prefixed; hosts with ≥3 DNS labels are used as-is."
   type        = string
   default     = null
+}
+
+variable "spa_bucket_force_destroy" {
+  description = "When true, allow Terraform to destroy non-empty SPA S3 buckets (preview environments)."
+  type        = bool
+  default     = false
 }
 
 variable "acm_certificate_arn" {
@@ -48,8 +54,9 @@ variable "ip_hash_secret" {
 }
 
 variable "app_version" {
-  type    = string
-  default = "0.0.0"
+  type        = string
+  default     = "0.0.0"
+  description = "Runtime build id exposed on GET /health (CI sets short git SHA; package.json stays 0.0.0)."
 }
 
 variable "http_lambda_zip" {

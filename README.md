@@ -4,7 +4,7 @@ A **shared AWS API layer** and **IaC** home for cross-app **HTTPS** services: on
 
 ## Status
 
-**Phase 1** implements **analytics-style ingest** (`POST /analytics/events?v=1`), **DynamoDB** storage, **OpenAPI 3** (`openapi/openapi.yaml`, generated from Zod), **CI** (tests + coverage + Spectral + OpenAPI drift check), and **Deploy** to AWS on `main` (Terraform + version bump, GitHub `production` environment).
+**Phase 1** implements **analytics-style ingest** (`POST /analytics/events?v=1`), **DynamoDB** storage, **OpenAPI 3** (`openapi/openapi.yaml`, generated from Zod), **CI** (tests + coverage + Spectral + OpenAPI drift check), **ephemeral PR previews** (deploy / validate / teardown), and **Deploy** to AWS on `main` (Terraform, GitHub `production` environment; `APP_VERSION` = short git SHA). See [docs/deployment.md](docs/deployment.md) and [docs/security-automation.md](docs/security-automation.md).
 
 ## Layout
 

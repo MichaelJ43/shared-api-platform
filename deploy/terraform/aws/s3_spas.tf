@@ -4,9 +4,10 @@
 #   aws s3 sync dashboard/dist/ s3://<bucket> --delete
 
 resource "aws_s3_bucket" "auth_spa" {
-  count  = var.auth_spa_domain != "" ? 1 : 0
-  bucket = "${local.name}-auth-spa"
-  tags   = local.common_tags
+  count         = var.auth_spa_domain != "" ? 1 : 0
+  bucket        = "${local.name}-auth-spa"
+  force_destroy = var.spa_bucket_force_destroy
+  tags          = local.common_tags
 }
 
 resource "aws_s3_bucket_public_access_block" "auth_spa" {
@@ -20,9 +21,10 @@ resource "aws_s3_bucket_public_access_block" "auth_spa" {
 }
 
 resource "aws_s3_bucket" "dashboard_spa" {
-  count  = var.dashboard_spa_domain != "" ? 1 : 0
-  bucket = "${local.name}-dashboard"
-  tags   = local.common_tags
+  count         = var.dashboard_spa_domain != "" ? 1 : 0
+  bucket        = "${local.name}-dashboard"
+  force_destroy = var.spa_bucket_force_destroy
+  tags          = local.common_tags
 }
 
 resource "aws_s3_bucket_public_access_block" "dashboard_spa" {

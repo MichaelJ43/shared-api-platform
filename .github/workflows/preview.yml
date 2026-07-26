@@ -1,0 +1,480 @@
+name: Preview
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, closed]
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+  pull-requests: write
+  actions: write
+  deployments: write
+
+concurrency:
+  group: preview-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+  TF_STATE_LOCK_TABLE: ${{ secrets.TF_STATE_LOCK_TABLE }}
+  TF_STATE_KEY: shared-api-platform/previews/pr-${{ github.event.pull_request.number }}/terraform.tfstate
+  TF_IN_AUTOMATION: "true"
+  BASE_HOST: ${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
+  API_HOST: api-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
+  AUTH_HOST: auth-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
+  DASH_HOST: analytics-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
+
+jobs:
+  deploy:
+    name: Deploy preview
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    environment:
+      name: preview-pr-${{ github.event.pull_request.number }}
+      url: https://api-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: App version
+        id: v
+        run: |
+          sha="$(echo '${{ github.event.pull_request.head.sha }}' | cut -c1-7)"
+          echo "app_version=pr-${{ github.event.pull_request.number }}-${sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            lambda/package-lock.json
+            dashboard/package-lock.json
+            auth-spa/package-lock.json
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Build Lambda
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE/lambda"
+          npm ci
+          npm run build
+          test -f dist/http.zip
+          unzip -l dist/http.zip | grep -q 'node_modules/argon2/prebuilds/linux-x64' || { echo "argon2 native prebuilds missing from http.zip"; exit 1; }
+          unzip -l dist/http.zip | grep -q 'node_modules/@phc/format' || { echo "@phc/format missing from http.zip"; exit 1; }
+          unzip -l dist/http.zip | grep -q 'node_modules/node-gyp-build' || { echo "node-gyp-build missing from http.zip"; exit 1; }
+          unzip -l dist/http.zip | grep -q 'data/ip2region/ip2region_v4.xdb' || { echo "ip2region v4 xdb missing from http.zip"; exit 1; }
+
+      - name: Terraform init
+        working-directory: deploy/terraform/aws
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_STATE_LOCK_TABLE}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform apply
+        working-directory: deploy/terraform/aws
+        env:
+          IP_HASH: ${{ secrets.IP_HASH_SECRET }}
+        run: |
+          set -euo pipefail
+          set -a
+          export TF_VAR_aws_region="${{ secrets.AWS_REGION }}"
+          export TF_VAR_environment="pr-${PR_NUMBER}"
+          export TF_VAR_app_version="${{ steps.v.outputs.app_version }}"
+          export TF_VAR_spa_bucket_force_destroy=true
+          export TF_VAR_cors_allowed_base_host="${BASE_HOST}"
+          export TF_VAR_custom_domain="${API_HOST}"
+          export TF_VAR_auth_spa_domain="${AUTH_HOST}"
+          export TF_VAR_dashboard_spa_domain="${DASH_HOST}"
+          export TF_VAR_auth_default_app_url="https://${DASH_HOST}/"
+          if [ -n "$IP_HASH" ]; then
+            export TF_VAR_ip_hash_secret="$IP_HASH"
+          fi
+          if [ -n "${{ secrets.TF_ACM_CERTIFICATE_ARN }}" ]; then
+            export TF_VAR_acm_certificate_arn="${{ secrets.TF_ACM_CERTIFICATE_ARN }}"
+          fi
+          if [ -n "${{ secrets.TF_ROUTE53_HOSTED_ZONE_ID }}" ]; then
+            export TF_VAR_route53_hosted_zone_id="${{ secrets.TF_ROUTE53_HOSTED_ZONE_ID }}"
+          fi
+          if [ -n "${{ secrets.TF_AUTH_SPA_ACM_CERTIFICATE_ARN }}" ]; then
+            export TF_VAR_auth_spa_acm_certificate_arn="${{ secrets.TF_AUTH_SPA_ACM_CERTIFICATE_ARN }}"
+          fi
+          if [ -n "${{ secrets.TF_DASHBOARD_SPA_ACM_CERTIFICATE_ARN }}" ]; then
+            export TF_VAR_dashboard_spa_acm_certificate_arn="${{ secrets.TF_DASHBOARD_SPA_ACM_CERTIFICATE_ARN }}"
+          fi
+          if [ -n "${{ secrets.TF_AUTH_SPA_ROUTE53_HOSTED_ZONE_ID }}" ]; then
+            export TF_VAR_auth_spa_route53_hosted_zone_id="${{ secrets.TF_AUTH_SPA_ROUTE53_HOSTED_ZONE_ID }}"
+          fi
+          if [ -n "${{ secrets.TF_DASHBOARD_SPA_ROUTE53_HOSTED_ZONE_ID }}" ]; then
+            export TF_VAR_dashboard_spa_route53_hosted_zone_id="${{ secrets.TF_DASHBOARD_SPA_ROUTE53_HOSTED_ZONE_ID }}"
+          fi
+          if [ -n "${{ vars.AUTH_SESSION_TTL_SECONDS }}" ]; then
+            export TF_VAR_auth_session_ttl_seconds="${{ vars.AUTH_SESSION_TTL_SECONDS }}"
+          fi
+          # Previews keep self-register off; use production bootstrap path if needed.
+          export TF_VAR_auth_allow_register=false
+          set +a
+          terraform apply -auto-approve
+
+      - name: Capture Terraform outputs
+        id: tf
+        working-directory: deploy/terraform/aws
+        run: |
+          echo "api_url=$(terraform output -raw http_api_url)" >> "$GITHUB_OUTPUT"
+          OUT=$(terraform output -json)
+          echo "dash_bucket=$(echo "$OUT" | jq -r '.dashboard_spa_s3_bucket.value // empty')" >> "$GITHUB_OUTPUT"
+          echo "auth_bucket=$(echo "$OUT" | jq -r '.auth_spa_s3_bucket.value // empty')" >> "$GITHUB_OUTPUT"
+          echo "dash_cf=$(echo "$OUT" | jq -r '.dashboard_spa_cloudfront_id.value // empty')" >> "$GITHUB_OUTPUT"
+          echo "auth_cf=$(echo "$OUT" | jq -r '.auth_spa_cloudfront_id.value // empty')" >> "$GITHUB_OUTPUT"
+          echo "dash_url=$(echo "$OUT" | jq -r '.dashboard_spa_url.value // empty')" >> "$GITHUB_OUTPUT"
+          echo "auth_url=$(echo "$OUT" | jq -r '.auth_spa_url.value // empty')" >> "$GITHUB_OUTPUT"
+
+      - name: Build and sync static SPAs
+        env:
+          API_URL: ${{ steps.tf.outputs.api_url }}
+          AUTH_URL: ${{ steps.tf.outputs.auth_url }}
+          DASH_BUCKET: ${{ steps.tf.outputs.dash_bucket }}
+          AUTH_BUCKET: ${{ steps.tf.outputs.auth_bucket }}
+          DASH_CF: ${{ steps.tf.outputs.dash_cf }}
+          AUTH_CF: ${{ steps.tf.outputs.auth_cf }}
+        run: |
+          set -euo pipefail
+          if [ -n "${DASH_BUCKET:-}" ] && [ "$DASH_BUCKET" != "null" ]; then
+            echo "::group::dashboard → s3://$DASH_BUCKET"
+            cd "$GITHUB_WORKSPACE/dashboard"
+            npm ci
+            VITE_API_BASE_URL="$API_URL" VITE_AUTH_ORIGIN="${AUTH_URL:-}" npm run build
+            aws s3 sync dist/ "s3://${DASH_BUCKET}/" --delete
+            echo "::endgroup::"
+            if [ -n "${DASH_CF:-}" ] && [ "$DASH_CF" != "null" ]; then
+              aws cloudfront create-invalidation --distribution-id "$DASH_CF" --paths "/index.html" "/*"
+            fi
+          fi
+          if [ -n "${AUTH_BUCKET:-}" ] && [ "$AUTH_BUCKET" != "null" ]; then
+            echo "::group::auth-spa → s3://$AUTH_BUCKET"
+            cd "$GITHUB_WORKSPACE/auth-spa"
+            npm ci
+            VITE_API_BASE_URL="$API_URL" npm run build
+            aws s3 sync dist/ "s3://${AUTH_BUCKET}/" --delete
+            echo "::endgroup::"
+            if [ -n "${AUTH_CF:-}" ] && [ "$AUTH_CF" != "null" ]; then
+              aws cloudfront create-invalidation --distribution-id "$AUTH_CF" --paths "/index.html" "/*"
+            fi
+          fi
+
+      - name: Comment preview URL
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- shared-api-platform-preview -->';
+            const body = [
+              marker,
+              '### Preview deployment',
+              '',
+              `- API: ${{ steps.tf.outputs.api_url }}`,
+              `- Auth: ${{ steps.tf.outputs.auth_url || 'n/a' }}`,
+              `- Dashboard: ${{ steps.tf.outputs.dash_url || 'n/a' }}`,
+              '',
+              `This preview is isolated to PR #${{ github.event.pull_request.number }} and will be destroyed when the PR closes.`,
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === 'Bot' && comment.body.includes(marker)
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
+
+      - name: Summary
+        run: |
+          echo "### Preview deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "- API: ${{ steps.tf.outputs.api_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Auth: ${{ steps.tf.outputs.auth_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Dashboard: ${{ steps.tf.outputs.dash_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Terraform state key: \`${TF_STATE_KEY}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    name: Validate preview
+    needs: deploy
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    env:
+      PREVIEW_API_URL: https://api-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
+      PREVIEW_AUTH_URL: https://auth-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
+      PREVIEW_DASH_URL: https://analytics-pr-${{ github.event.pull_request.number }}.${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
+      DREDD_ORIGIN: https://${{ vars.CORS_ALLOWED_BASE_HOST || 'michaelj43.dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: contract/package-lock.json
+
+      - name: Wait for preview API health
+        run: |
+          set -euo pipefail
+          url="${PREVIEW_API_URL}/health"
+          echo "Waiting for ${url}"
+          for i in $(seq 1 60); do
+            code="$(curl -fsS -o /tmp/preview-health.json -w "%{http_code}" "$url" || true)"
+            if [ "$code" = "200" ] && grep -q '"ok":true' /tmp/preview-health.json; then
+              echo "Preview API is up (attempt ${i})"
+              cat /tmp/preview-health.json
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Preview /health did not return ok in time"
+          exit 1
+
+      - name: Wait for preview SPAs
+        run: |
+          set -euo pipefail
+          for url in "${PREVIEW_AUTH_URL}/" "${PREVIEW_DASH_URL}/"; do
+            echo "Waiting for ${url}"
+            ok=false
+            for i in $(seq 1 36); do
+              if curl -fsS -o /dev/null -w "%{http_code}" "$url" | grep -q '^200$'; then
+                echo "Up (attempt ${i}): ${url}"
+                ok=true
+                break
+              fi
+              sleep 10
+            done
+            if [ "$ok" != true ]; then
+              echo "::error::SPA URL did not return 200 in time: ${url}"
+              exit 1
+            fi
+          done
+
+      - name: Install (contract)
+        working-directory: contract
+        run: npm ci
+
+      - name: Dredd against preview
+        working-directory: contract
+        run: node run-dredd.cjs
+        env:
+          DREDD_BASE_URL: ${{ env.PREVIEW_API_URL }}
+          DREDD_ORIGIN: ${{ env.DREDD_ORIGIN }}
+
+      - name: Summary
+        run: |
+          echo "### Validate preview" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Health: ${PREVIEW_API_URL}/health" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Auth: ${PREVIEW_AUTH_URL}/" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Dashboard: ${PREVIEW_DASH_URL}/" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Dredd: passed" >> "$GITHUB_STEP_SUMMARY"
+
+  # Required status check for branch protection. Dependabot skips deploy/validate;
+  # this job still reports success so patch/minor auto-merge can proceed.
+  preview-gate:
+    name: Preview gate
+    needs: [deploy, validate]
+    if: always() && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate preview requirements
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+        run: |
+          set -euo pipefail
+          if [ "$AUTHOR" = "dependabot[bot]" ]; then
+            echo "Dependabot PR; ephemeral preview not required."
+            exit 0
+          fi
+          if [ "$DEPLOY_RESULT" = "success" ] && [ "$VALIDATE_RESULT" = "success" ]; then
+            echo "Deploy and validate succeeded."
+            exit 0
+          fi
+          echo "::error::Preview gate failed (deploy=${DEPLOY_RESULT}, validate=${VALIDATE_RESULT})"
+          exit 1
+
+  teardown:
+    name: Teardown preview
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: lambda/package-lock.json
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Build Lambda zip (required by Terraform config)
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE/lambda"
+          npm ci
+          npm run build
+          test -f dist/http.zip
+
+      - name: Terraform init
+        working-directory: deploy/terraform/aws
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_STATE_LOCK_TABLE}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform destroy
+        working-directory: deploy/terraform/aws
+        env:
+          IP_HASH: ${{ secrets.IP_HASH_SECRET }}
+        run: |
+          set -euo pipefail
+          set -a
+          export TF_VAR_aws_region="${{ secrets.AWS_REGION }}"
+          export TF_VAR_environment="pr-${PR_NUMBER}"
+          export TF_VAR_spa_bucket_force_destroy=true
+          export TF_VAR_cors_allowed_base_host="${BASE_HOST}"
+          export TF_VAR_custom_domain="${API_HOST}"
+          export TF_VAR_auth_spa_domain="${AUTH_HOST}"
+          export TF_VAR_dashboard_spa_domain="${DASH_HOST}"
+          export TF_VAR_auth_default_app_url="https://${DASH_HOST}/"
+          export TF_VAR_auth_allow_register=false
+          if [ -n "$IP_HASH" ]; then
+            export TF_VAR_ip_hash_secret="$IP_HASH"
+          fi
+          if [ -n "${{ secrets.TF_ACM_CERTIFICATE_ARN }}" ]; then
+            export TF_VAR_acm_certificate_arn="${{ secrets.TF_ACM_CERTIFICATE_ARN }}"
+          fi
+          if [ -n "${{ secrets.TF_ROUTE53_HOSTED_ZONE_ID }}" ]; then
+            export TF_VAR_route53_hosted_zone_id="${{ secrets.TF_ROUTE53_HOSTED_ZONE_ID }}"
+          fi
+          if [ -n "${{ secrets.TF_AUTH_SPA_ACM_CERTIFICATE_ARN }}" ]; then
+            export TF_VAR_auth_spa_acm_certificate_arn="${{ secrets.TF_AUTH_SPA_ACM_CERTIFICATE_ARN }}"
+          fi
+          if [ -n "${{ secrets.TF_DASHBOARD_SPA_ACM_CERTIFICATE_ARN }}" ]; then
+            export TF_VAR_dashboard_spa_acm_certificate_arn="${{ secrets.TF_DASHBOARD_SPA_ACM_CERTIFICATE_ARN }}"
+          fi
+          if [ -n "${{ secrets.TF_AUTH_SPA_ROUTE53_HOSTED_ZONE_ID }}" ]; then
+            export TF_VAR_auth_spa_route53_hosted_zone_id="${{ secrets.TF_AUTH_SPA_ROUTE53_HOSTED_ZONE_ID }}"
+          fi
+          if [ -n "${{ secrets.TF_DASHBOARD_SPA_ROUTE53_HOSTED_ZONE_ID }}" ]; then
+            export TF_VAR_dashboard_spa_route53_hosted_zone_id="${{ secrets.TF_DASHBOARD_SPA_ROUTE53_HOSTED_ZONE_ID }}"
+          fi
+          set +a
+          terraform destroy -auto-approve
+
+      - name: Delete preview Terraform state
+        run: aws s3 rm "s3://${TF_STATE_BUCKET}/${TF_STATE_KEY}" || true
+
+      - name: Mark preview deployment inactive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENV_NAME: preview-pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          DEPLOYMENT_ID="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/deployments" \
+            -f environment="${ENV_NAME}" \
+            --jq '.[0].id // empty' || true)"
+          if [ -z "$DEPLOYMENT_ID" ]; then
+            echo "::warning::No deployment found for ${ENV_NAME}; skipping inactive status update."
+            exit 0
+          fi
+          if ! gh api --method POST "repos/${GITHUB_REPOSITORY}/deployments/${DEPLOYMENT_ID}/statuses" \
+            -f state=inactive \
+            -f description="Preview environment destroyed"; then
+            echo "::warning::Could not mark ${ENV_NAME} deployment inactive."
+          fi
+
+      - name: Comment teardown
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- shared-api-platform-preview -->';
+            const body = [
+              marker,
+              '### Preview deployment',
+              '',
+              'Preview environment for PR #${{ github.event.pull_request.number }} has been destroyed.',
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === 'Bot' && comment.body.includes(marker)
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
+
+      - name: Summary
+        run: |
+          echo "### Preview teardown" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Destroyed PR #${PR_NUMBER} preview resources." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Removed Terraform state key: \`${TF_STATE_KEY}\`" >> "$GITHUB_STEP_SUMMARY"

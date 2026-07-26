@@ -39,7 +39,7 @@ resource "aws_lambda_permission" "http_invoke" {
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
 }
 
-# Optional custom domain: see local.api_domain_name (https://api.<apex> or the given api.<host>).
+# Optional custom domain: see local.api_domain_name (https://api.<apex> or a full host with ≥3 labels).
 resource "aws_apigatewayv2_domain_name" "http" {
   count = local.use_custom_domain ? 1 : 0
 
