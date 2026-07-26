@@ -25,7 +25,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@stoplight/spectral-cli": "^6.11.0",
+    "@stoplight/spectral-cli": "^6.16.2",
     "@types/aws-lambda": "^8.10.145",
     "@types/node": "^22.9.0",
     "@vitest/coverage-v8": "^2.1.0",
