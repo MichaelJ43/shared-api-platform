@@ -27,7 +27,7 @@
   "devDependencies": {
     "@stoplight/spectral-cli": "^6.16.2",
     "@types/aws-lambda": "^8.10.162",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "@vitest/coverage-v8": "^4.1.10",
     "archiver": "^8.0.0",
     "esbuild": "^0.28.1",
