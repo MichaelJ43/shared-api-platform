@@ -18,7 +18,7 @@
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-dynamodb": "^3.1095.0",
-    "@aws-sdk/lib-dynamodb": "^3.1095.0",
+    "@aws-sdk/lib-dynamodb": "^3.1099.0",
     "argon2": "^0.44.0",
     "ip2region.js": "^3.1.8",
     "ulid": "^2.3.0",
