@@ -30,7 +30,7 @@
     "@types/node": "^26.1.2",
     "@vitest/coverage-v8": "^4.1.10",
     "archiver": "^8.0.0",
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.9",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10",
